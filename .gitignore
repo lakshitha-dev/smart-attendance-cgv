@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# SAMS runtime outputs (generated per run — not source)
+output/
+*.db
+*.sqlite3
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

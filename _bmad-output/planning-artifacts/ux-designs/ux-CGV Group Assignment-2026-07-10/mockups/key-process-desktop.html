@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAMS — Key Screen: Process, desktop (post-run + overwrite warning)</title>
+<style>
+/* ============================================================
+   SAMS — Key Screen: PROCESS (landing page) — DESKTOP
+   Direction: Quiet Clerk (DESIGN.md). Sibling of key-process.html
+   (phone) — same content, students, strings, and states; only the
+   layout changes per the Responsive & Platform spec.
+   Governing spine sections:
+   - EXPERIENCE.md: Responsive & Platform ("Process on desktop —
+     two columns: left carries the upload slots and the pipeline
+     stage strip (stages as a vertical labelled list with larger
+     thumbnails); right carries the results summary and the
+     results row list. The overwrite warning presents as a
+     centered, modal-style choice."; breakpoints — sidebar visible
+     at ~768px+, content column max-width ~1100px, centered;
+     pointer vs touch — row hover tint {colors.row-hover}, hover
+     never required to reveal information; demo/projector
+     legibility); IA (three pages on the native multipage sidebar,
+     Process is the landing page); Voice and Tone (upload hint,
+     greyscale caption, pipeline done, results summary, ambiguous
+     row, after-resolve — verbatim); Component Patterns rows "File
+     slots", "Process button", "Overwrite warning", "Pipeline
+     stage strip", "Results row list", "Ambiguous row resolve";
+     State Patterns rows Process/Success; Flow 1 (UJ-1).
+   - DESIGN.md: Layout & Spacing (content-max-width 1100px,
+     column-gap 24px, restrained two-column grid on desktop —
+     "never a dashboard"), Colors (status colours only on chips /
+     ambiguous accent; "✓ Ready" in slate {colors.primary};
+     neutral checklist ticks; row-hover #F3F2EE enhancement only),
+     Components (button-primary, file slot, pipeline checklist /
+     stage strip, status chip, result row, result-row-ambiguous,
+     resolve-button), Typography, Shapes, Do's and Don'ts.
+   Static mock: no JS, no network, light mode only, browser frame
+   ~1280px wide, Streamlit-plausible visible sidebar.
+   ============================================================ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #e7e8ec; color: #24272e; padding: 28px 24px 64px; line-height: 1.5;
+}
+.caption-head { max-width: 1280px; margin: 0 auto 26px; font-size: 13.5px; color: #4b515c; }
+.caption-head b { color: #24272e; }
+.state-label { max-width: 1280px; margin: 38px auto 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8a8f9a; text-align: center; }
+
+/* ---- Browser frame (~1280px) ---- */
+.browser { width: 1280px; max-width: 100%; margin: 0 auto; border-radius: 14px; overflow: hidden;
+  background: #FFFFFF; box-shadow: 0 24px 48px -20px rgba(20,24,34,0.35), 0 4px 12px rgba(20,24,34,0.15); }
+.browser-bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #ECEBE7; border-bottom: 1px solid #DDDCD6; }
+.dots { display: flex; gap: 7px; flex: none; }
+.dots span { width: 11px; height: 11px; border-radius: 9999px; background: #C9C8C2; } /* neutral dots — no decorative red/green */
+.url { flex: 1; max-width: 460px; margin: 0 auto; background: #FFFFFF; border: 1px solid #DDDCD6;
+  border-radius: 8px; font-size: 12px; color: #7B818A; padding: 4px 14px; text-align: center; }
+.bar-spacer { width: 46px; flex: none; }
+
+/* ---- Streamlit-plausible app shell: visible sidebar + centered content ---- */
+.app { display: flex; align-items: stretch; background: #FAFAF8; color: #33383F; font-size: 15px; position: relative; }
+.sidebar { width: 248px; flex: none; background: #FFFFFF; border-right: 1px solid #E9E8E3; padding: 22px 14px 30px; }
+.sb-name { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #7B818A; padding: 0 12px 14px; }
+.sb-item { display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 10px;
+  font-size: 14.5px; color: #33383F; margin-top: 4px; }
+.sb-item.is-active { background: #F3F2EE; color: #44526A; font-weight: 600; box-shadow: inset 3px 0 0 #44526A; }
+.sb-cap { font-size: 12px; color: #7B818A; padding: 16px 12px 0; }
+.main { flex: 1; min-width: 0; padding: 26px 36px 46px; }
+.content { max-width: 1100px; margin: 0 auto; } /* {spacing.content-max-width} */
+
+/* ---- Page head ---- */
+.app-name { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #7B818A; }
+.app-title { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin-top: 6px; }
+.session { font-size: 13px; color: #7B818A; margin-top: 4px; }
+
+/* ---- Two-column layout (Responsive & Platform: Process on desktop) ---- */
+.cols { display: flex; gap: 24px; align-items: flex-start; margin-top: 18px; } /* {spacing.column-gap} */
+.col-left { flex: 0 0 calc(46% - 12px); min-width: 0; }
+.col-right { flex: 1; min-width: 0; }
+
+/* ---- Cards ---- */
+.card { background: #FFFFFF; border: 1px solid #E9E8E3; border-radius: 14px; margin-top: 16px; padding: 16px; }
+.card:first-child { margin-top: 0; }
+.hint { font-size: 13.5px; color: #7B818A; margin-bottom: 12px; }
+
+/* ---- File slots ---- */
+.file-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid #F1F0EC; min-height: 48px; }
+.file-row:first-of-type { border-top: 0; padding-top: 2px; }
+.file-ic { width: 36px; height: 36px; border-radius: 10px; background: #F4F3EF; display: flex; align-items: center;
+  justify-content: center; font-size: 16px; color: #44526A; flex: none; }
+.file-label { font-weight: 600; font-size: 14.5px; }
+.file-sub { font-size: 12.5px; color: #7B818A; }
+.file-ok { margin-left: auto; color: #44526A; font-size: 13px; font-weight: 600; white-space: nowrap; } /* slate, never Present green */
+
+/* ---- Primary button ---- */
+.btn-process { display: block; width: 100%; margin-top: 16px; background: #44526A; color: #FFFFFF;
+  border: 0; border-radius: 12px; min-height: 52px; font-size: 16px; font-weight: 600; text-align: center; line-height: 52px; }
+.btn-process.is-waiting { opacity: 0.45; }
+
+/* ---- Pipeline stage strip: vertical labelled list, larger thumbnails ---- */
+.steps-title { font-size: 13px; font-weight: 700; color: #7B818A; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+.exp { border-top: 1px solid #F1F0EC; }
+.exp:first-of-type { border-top: 0; }
+.exp-head { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 6px 0; font-size: 14px; }
+.tick { width: 20px; height: 20px; border-radius: 9999px; background: #E9E8E3; color: #44526A; font-size: 12px;
+  font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none; } /* neutral tick: stage done is not a status */
+.stage-thumb { margin-left: auto; width: 88px; height: 58px; border: 1px solid #E9E8E3; border-radius: 10px; overflow: hidden;
+  position: relative; flex: none; background: linear-gradient(150deg, #d6d6d6 0%, #a9a9a9 100%); }
+.stage-thumb::after { content: ""; position: absolute; inset: 18% 12%;
+  background: repeating-linear-gradient(#f2f2f2 0 3px, transparent 3px 8px); transform: rotate(-4deg); }
+.exp-chev { color: #7B818A; font-size: 12px; margin-left: 8px; flex: none; }
+.exp-body { padding: 2px 0 12px 30px; }
+.stage-img { width: 100%; aspect-ratio: 4 / 3; border: 1px solid #E9E8E3; border-radius: 10px; overflow: hidden; position: relative;
+  background: linear-gradient(150deg, #d6d6d6 0%, #a9a9a9 100%); } /* square-cornered evidence inside a rounded frame */
+.stage-img::after { content: ""; position: absolute; inset: 16% 12%;
+  background: repeating-linear-gradient(#f2f2f2 0 4px, transparent 4px 10px); transform: rotate(-4deg); }
+.stage-cap { font-size: 12.5px; color: #7B818A; margin-top: 8px; }
+.steps-done { font-size: 14px; color: #33383F; margin-top: 12px; }
+.steps-saved { font-size: 12.5px; color: #7B818A; margin-top: 2px; }
+
+/* ---- Results (right column) ---- */
+.results-head { font-size: 17px; font-weight: 600; }
+.results-sub { font-size: 13px; color: #7B818A; margin-top: 2px; }
+.stu { background: #FFFFFF; border: 1px solid #E9E8E3; border-radius: 14px; margin-top: 10px; padding: 14px 16px; }
+.stu:hover { background: #F3F2EE; } /* {colors.row-hover} — enhancement only; hover never carries information */
+.stu.is-hover { background: #F3F2EE; } /* static demonstration of the pointer-hover tint */
+.stu-row { display: flex; align-items: center; gap: 10px; }
+.stu-name { font-weight: 600; font-size: 15px; }
+.stu-idx { font-size: 12.5px; color: #7B818A; font-variant-numeric: tabular-nums; }
+.status { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; white-space: nowrap; }
+.st-present { color: #256E4C; }
+.st-absent  { color: #A63D2A; }
+.st-amb     { color: #7A6212; }
+.glyph { font-weight: 700; display: inline-block; }
+.stu-amb { border-color: #E3D9B4; background: #FDFBF2; } /* the one row allowed to raise its hand */
+.stu-amb:hover { background: #FDFBF2; } /* the ambiguous accent, not the hover tint, owns this row */
+.amb-help { font-size: 13px; color: #7A6212; margin-top: 8px; }
+.amb-actions { display: flex; gap: 10px; margin-top: 10px; }
+.amb-btn { flex: 1; min-height: 46px; border-radius: 10px; font-size: 14.5px; font-weight: 700; display: flex;
+  align-items: center; justify-content: center; gap: 6px; border: 1.5px solid #E9E8E3; background: #FFFFFF; color: #33383F; }
+  /* neutral-outlined: icon + text label carries the meaning; chrome takes no status colour */
+.hover-note { font-size: 12px; color: #7B818A; margin-top: 6px; padding-left: 4px; }
+
+.foot { padding: 26px 0 4px; font-size: 12.5px; color: #7B818A; text-align: center; }
+
+/* ---- Overwrite warning: centered, modal-style choice ---- */
+.scrim { position: absolute; inset: 0; background: rgba(51, 56, 63, 0.30); display: flex;
+  align-items: center; justify-content: center; padding: 40px; }
+.warn-card { background: #FFFFFF; border: 1px solid #E9E8E3; border-radius: 14px; padding: 20px; width: 460px; max-width: 100%; }
+.warn-text { font-size: 15px; font-weight: 600; }
+.warn-sub { font-size: 12.5px; color: #7B818A; margin-top: 4px; }
+.warn-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.warn-keep { min-height: 52px; border: 0; border-radius: 12px; background: #44526A; color: #FFFFFF; font-size: 15px; font-weight: 600; }
+.warn-over { min-height: 46px; border: 1.5px solid #E9E8E3; border-radius: 10px; background: #FFFFFF; color: #33383F; font-size: 14.5px; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<p class="caption-head"><b>Process — post-run, desktop.</b> The same landing page as the phone mock at the office desk: Streamlit's sidebar visible with Process highlighted, and the Responsive &amp; Platform two-column layout — upload slots and the pipeline stage strip (vertical labelled list with larger thumbnails, Greyscale expanded) on the left, results summary and row list with one Ambiguous row on the right; below it, the overwrite warning presented as a centered, modal-style choice.</p>
+
+<!-- ============ STATE 1: POST-RUN SUCCESS (two columns) ============ -->
+<div class="state-label">State 1 — post-run (pipeline complete, one Ambiguous row; pointer hover shown on one row)</div>
+<div class="browser">
+  <div class="browser-bar">
+    <div class="dots"><span></span><span></span><span></span></div>
+    <div class="url">localhost:8501 — SAMS</div>
+    <div class="bar-spacer"></div>
+  </div>
+  <div class="app">
+    <nav class="sidebar" aria-label="Pages">
+      <div class="sb-name">SAMS</div>
+      <div class="sb-item is-active">Mark today's attendance</div>
+      <div class="sb-item">Look up a student</div>
+      <div class="sb-item">Check a signature</div>
+      <div class="sb-cap">CS402.3 · attendance records</div>
+    </nav>
+    <div class="main">
+      <div class="content">
+        <div class="app-name">SAMS</div>
+        <div class="app-title">Mark today's attendance</div>
+        <div class="session">CS402.3 — 10.07.2019</div>
+
+        <div class="cols">
+          <!-- LEFT column: upload slots + pipeline stage strip -->
+          <div class="col-left">
+            <div class="card">
+              <div class="hint">Add the sheet photo and the info file, then tap Process. That's all you need to do.</div>
+              <div class="file-row">
+                <div class="file-ic">▣</div>
+                <div>
+                  <div class="file-label">Signing Sheet</div>
+                  <div class="file-sub">10.07.2019.png · photo added</div>
+                </div>
+                <div class="file-ok">✓ Ready</div>
+              </div>
+              <div class="file-row">
+                <div class="file-ic">⿻</div>
+                <div>
+                  <div class="file-label">Info File</div>
+                  <div class="file-sub">info.xml · 42 students</div>
+                </div>
+                <div class="file-ok">✓ Ready</div>
+              </div>
+            </div>
+
+            <button class="btn-process">Process</button>
+
+            <div class="card">
+              <div class="steps-title">What we did with your photo</div>
+
+              <div class="exp">
+                <div class="exp-head"><span class="tick">✓</span> 1 · Original
+                  <div class="stage-thumb" role="img" aria-label="Stage 1 of 7 — Original sheet"></div>
+                  <span class="exp-chev">▸</span></div>
+              </div>
+              <div class="exp">
+                <div class="exp-head"><span class="tick">✓</span> 2 · Greyscale
+                  <div class="stage-thumb" role="img" aria-label="Stage 2 of 7 — Greyscale sheet"></div>
+                  <span class="exp-chev">▾</span></div>
+                <div class="exp-body">
+                  <div class="stage-img" role="img" aria-label="Stage 2 of 7 — Greyscale sheet"></div>
+                  <div class="stage-cap">Any pen colour works — the greyscale step evens it out.</div>
+                </div>
+              </div>
+              <div class="exp">
+                <div class="exp-head"><span class="tick">✓</span> 3 · Denoised
+                  <div class="stage-thumb" role="img" aria-label="Stage 3 of 7 — Denoised sheet"></div>
+                  <span class="exp-chev">▸</span></div>
+              </div>
+              <div class="exp">
+                <div class="exp-head"><span class="tick">✓</span> 4 · Binarized
+                  <div class="stage-thumb" role="img" aria-label="Stage 4 of 7 — Binarized sheet"></div>
+                  <span class="exp-chev">▸</span></div>
+              </div>
+              <div class="exp">
+                <div class="exp-head"><span class="tick">✓</span> 5 · Deskewed
+                  <div class="stage-thumb" role="img" aria-label="Stage 5 of 7 — Deskewed sheet"></div>
+                  <span class="exp-chev">▸</span></div>
+              </div>
+              <div class="exp">
+                <div class="exp-head"><span class="tick">✓</span> 6 · Detected table grid
+                  <div class="stage-thumb" role="img" aria-label="Stage 6 of 7 — Detected table grid"></div>
+                  <span class="exp-chev">▸</span></div>
+              </div>
+              <div class="exp">
+                <div class="exp-head"><span class="tick">✓</span> 7 · Per-cell inspection
+                  <div class="stage-thumb" role="img" aria-label="Stage 7 of 7 — Per-cell inspection"></div>
+                  <span class="exp-chev">▸</span></div>
+              </div>
+
+              <div class="steps-done">All finished — your results are below.</div>
+              <div class="steps-saved">Results saved.</div>
+            </div>
+          </div>
+
+          <!-- RIGHT column: results summary + row list -->
+          <div class="col-right">
+            <div class="results-head">Results</div>
+            <div class="results-sub">42 students checked. One needs a quick look from you.</div>
+
+            <div class="stu">
+              <div class="stu-row">
+                <div>
+                  <div class="stu-name">W.M.T.S. Bandara</div>
+                  <div class="stu-idx">10009301</div>
+                </div>
+                <div class="status st-present"><span class="glyph">✓</span> Present</div>
+              </div>
+            </div>
+
+            <div class="stu">
+              <div class="stu-row">
+                <div>
+                  <div class="stu-name">K.A.D.N. Perera</div>
+                  <div class="stu-idx">10009315</div>
+                </div>
+                <div class="status st-absent"><span class="glyph">✕</span> Absent</div>
+              </div>
+            </div>
+
+            <!-- Ambiguous row: distinct accent + neutral-outlined one-tap resolution -->
+            <div class="stu stu-amb">
+              <div class="stu-row">
+                <div>
+                  <div class="stu-name">R.M.S.P. Herath</div>
+                  <div class="stu-idx">10009322</div>
+                </div>
+                <div class="status st-amb"><span class="glyph">?</span> Ambiguous</div>
+              </div>
+              <div class="amb-help">We couldn't read this signature clearly. Which is right?</div>
+              <div class="amb-actions">
+                <button class="amb-btn">✓ Present</button>
+                <button class="amb-btn">✕ Absent</button>
+              </div>
+            </div>
+
+            <!-- Pointer hover shown statically on this row -->
+            <div class="stu is-hover">
+              <div class="stu-row">
+                <div>
+                  <div class="stu-name">H.P.C.M. Silva</div>
+                  <div class="stu-idx">10009338</div>
+                </div>
+                <div class="status st-present"><span class="glyph">✓</span> Present</div>
+              </div>
+            </div>
+            <div class="hover-note">Pointer hover shown on this row — the tint is an enhancement only; hover never reveals or carries information.</div>
+
+            <div class="stu">
+              <div class="stu-row">
+                <div>
+                  <div class="stu-name">J.A.T.M. Fernando</div>
+                  <div class="stu-idx">10009344</div>
+                </div>
+                <div class="status st-present"><span class="glyph">✓</span> Present</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="foot">Select a stage on the left to see what that step looked like.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ STATE 2: OVERWRITE WARNING (centered, modal-style) ============ -->
+<div class="state-label">State 2 — overwrite warning (Sheet Identifier already has saved operator resolutions)</div>
+<div class="browser">
+  <div class="browser-bar">
+    <div class="dots"><span></span><span></span><span></span></div>
+    <div class="url">localhost:8501 — SAMS</div>
+    <div class="bar-spacer"></div>
+  </div>
+  <div class="app">
+    <nav class="sidebar" aria-label="Pages">
+      <div class="sb-name">SAMS</div>
+      <div class="sb-item is-active">Mark today's attendance</div>
+      <div class="sb-item">Look up a student</div>
+      <div class="sb-item">Check a signature</div>
+      <div class="sb-cap">CS402.3 · attendance records</div>
+    </nav>
+    <div class="main">
+      <div class="content">
+        <div class="app-name">SAMS</div>
+        <div class="app-title">Mark today's attendance</div>
+        <div class="session">CS402.3 — 10.07.2019</div>
+
+        <div class="cols">
+          <div class="col-left">
+            <div class="card">
+              <div class="hint">Add the sheet photo and the info file, then tap Process. That's all you need to do.</div>
+              <div class="file-row">
+                <div class="file-ic">▣</div>
+                <div>
+                  <div class="file-label">Signing Sheet</div>
+                  <div class="file-sub">10.07.2019.png · photo added</div>
+                </div>
+                <div class="file-ok">✓ Ready</div>
+              </div>
+              <div class="file-row">
+                <div class="file-ic">⿻</div>
+                <div>
+                  <div class="file-label">Info File</div>
+                  <div class="file-sub">info.xml · 42 students</div>
+                </div>
+                <div class="file-ok">✓ Ready</div>
+              </div>
+            </div>
+            <button class="btn-process is-waiting">Process</button>
+          </div>
+          <div class="col-right"></div>
+        </div>
+
+        <div class="foot">Keeping your resolutions re-reads the sheet but leaves your hand-fixed answers alone.</div>
+      </div>
+    </div>
+
+    <!-- The only modal in the app (EXPERIENCE.md IA: "No modals except the overwrite warning") -->
+    <div class="scrim">
+      <div class="warn-card" role="dialog" aria-label="Overwrite warning">
+        <div class="warn-text">You've already fixed some answers for this sheet by hand.</div>
+        <div class="warn-sub">Nothing is processed until you choose.</div>
+        <div class="warn-actions">
+          <button class="warn-keep">Keep resolutions</button>
+          <button class="warn-over">Overwrite everything</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
