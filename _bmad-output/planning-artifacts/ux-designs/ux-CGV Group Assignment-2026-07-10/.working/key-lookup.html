@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAMS — Key Screen: Lookup (attendance summary + no data)</title>
+<style>
+/* ============================================================
+   SAMS — Key Screen: LOOKUP
+   Direction: Quiet Clerk (DESIGN.md).
+   Governing spine sections:
+   - DESIGN.md: Colors (status colours only on chips / ambiguous
+     accent / chart series — the chart is the one place all three
+     appear together, always with icon + label legend entries),
+     Components ("Charts (Lookup)" — the engine's Matplotlib
+     figure rendered as-is; this mock is a CSS stand-in for that
+     emitted figure), Typography, Layout & Spacing, Shapes.
+   - EXPERIENCE.md: IA row "Lookup"; Voice and Tone (unknown
+     Student Index, empty Lookup prompt — verbatim); Component
+     Patterns rows "Lookup form" (both index forms accepted) and
+     "Attendance graph" (FR-8 figure: per-Session timeline,
+     Ambiguous distinct, attendance-rate annotation, title +
+     axes + legend); State Patterns rows Lookup Success and
+     Lookup Error (unknown-index "no data", never an error tone);
+     Error catalog item 4; Flow 2 (UJ-2).
+   Static mock: no JS, no network, light mode only, ~375px phone.
+   ============================================================ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #e7e8ec; color: #24272e; padding: 28px 20px 64px; line-height: 1.5;
+}
+.caption-head { max-width: 900px; margin: 0 auto 26px; font-size: 13.5px; color: #4b515c; }
+.caption-head b { color: #24272e; }
+.state-label { max-width: 900px; margin: 34px auto 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8a8f9a; text-align: center; }
+.phone-wrap { display: flex; justify-content: center; }
+.phone { width: 399px; max-width: 100%; background: #16181d; border-radius: 44px; padding: 12px;
+  box-shadow: 0 24px 48px -20px rgba(20,24,34,0.45), 0 4px 12px rgba(20,24,34,0.18); }
+.phone .speaker { width: 96px; height: 6px; border-radius: 999px; background: #2c2f36; margin: 4px auto 8px; }
+.screen { border-radius: 30px; overflow: hidden; width: 100%; background: #FAFAF8; color: #33383F; font-size: 15px; }
+
+/* ---- Streamlit-plausible chrome ---- */
+.st-top { display: flex; align-items: center; padding: 12px 18px 0; }
+.st-burger { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center;
+  justify-content: center; color: #44526A; font-size: 18px; }
+
+.app-head { padding: 6px 22px 4px; }
+.app-name { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #7B818A; }
+.app-title { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin-top: 6px; }
+.prompt { font-size: 13px; color: #7B818A; margin-top: 4px; }
+
+.card { background: #FFFFFF; border: 1px solid #E9E8E3; border-radius: 14px; margin: 14px 18px 0; padding: 16px; }
+
+/* ---- Lookup form ---- */
+.fld-label { font-size: 13.5px; font-weight: 600; margin-bottom: 6px; display: block; }
+.fld { display: flex; align-items: center; min-height: 48px; border: 1px solid #E9E8E3; border-radius: 10px;
+  padding: 0 14px; font-size: 15px; background: #FFFFFF; color: #33383F; font-variant-numeric: tabular-nums; }
+.fld.is-focus { border-color: #44526A; box-shadow: 0 0 0 1px #44526A inset; }
+.fld-hint { font-size: 12.5px; color: #7B818A; margin-top: 6px; }
+
+/* ---- Chart card: CSS stand-in for the engine's FR-8 Matplotlib figure ---- */
+.fig-frame { border: 1px solid #E9E8E3; border-radius: 10px; padding: 10px 8px 8px; background: #FFFFFF; }
+.fig-title { font-size: 13px; font-weight: 600; text-align: center; color: #33383F; }
+.fig-sub { font-size: 11.5px; color: #7B818A; text-align: center; margin-top: 1px; }
+.plot { position: relative; margin: 12px 4px 0 54px; height: 150px; border-left: 1.5px solid #33383F; border-bottom: 1.5px solid #33383F; background: #FFFFFF; }
+.gline { position: absolute; left: 0; right: 0; border-top: 1px dashed #E9E8E3; }
+.gl-present { top: 22%; }
+.gl-amb { top: 50%; }
+.gl-absent { top: 78%; }
+.ylab { position: absolute; right: calc(100% + 8px); transform: translateY(-50%); font-size: 10.5px; color: #33383F; white-space: nowrap; }
+.yl-present { top: 22%; }
+.yl-amb { top: 50%; color: #7B818A; }
+.yl-absent { top: 78%; }
+.anno { position: absolute; top: 4px; right: 6px; font-size: 11.5px; font-weight: 700; color: #33383F;
+  background: #FAFAF8; border: 1px solid #E9E8E3; border-radius: 6px; padding: 2px 7px; }
+.marks { position: absolute; inset: 0; display: flex; }
+.mcol { flex: 1; position: relative; }
+.mark { position: absolute; left: 50%; transform: translate(-50%, -50%); font-size: 13px; font-weight: 800; line-height: 1; }
+.mk-p { top: 22%; color: #256E4C; }
+.mk-a { top: 78%; color: #A63D2A; }
+.mk-q { top: 50%; color: #7A6212; font-size: 14px; }
+.xlabs { display: flex; margin: 4px 4px 0 54px; }
+.xlabs span { flex: 1; font-size: 8.5px; color: #7B818A; text-align: center; transform: rotate(-42deg) translateY(6px); white-space: nowrap; }
+.x-title { text-align: center; font-size: 11px; color: #33383F; margin: 14px 0 0 54px; }
+.legend { display: flex; justify-content: center; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
+.legend span { font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
+.lg-p { color: #256E4C; }
+.lg-a { color: #A63D2A; }
+.lg-q { color: #7A6212; }
+.fig-cap { font-size: 12.5px; color: #7B818A; margin-top: 10px; }
+
+/* ---- No-data response ---- */
+.nodata { font-size: 15px; color: #33383F; }
+.nodata-list { font-size: 13.5px; color: #7B818A; margin-top: 8px; line-height: 1.7; font-variant-numeric: tabular-nums; }
+
+.foot { padding: 20px 22px 26px; font-size: 12.5px; color: #7B818A; text-align: center; }
+</style>
+</head>
+<body>
+
+<p class="caption-head"><b>Lookup.</b> Nadeesha answers a lecturer's question: she types a student's number (either form — <b>10009301</b> or <b>002</b>) and reads the per-Session attendance timeline with the overall rate; below, the calm "no data" response an unknown number gets, listing the students SAMS does know.</p>
+
+<!-- ============ STATE 1: SUCCESS (attendance summary) ============ -->
+<div class="state-label">State 1 — attendance summary for a known Student Index</div>
+<div class="phone-wrap">
+  <div class="phone">
+    <div class="speaker"></div>
+    <div class="screen">
+      <div class="st-top"><div class="st-burger" role="button" aria-label="Open navigation">☰</div></div>
+
+      <div class="app-head">
+        <div class="app-name">SAMS · Lookup</div>
+        <div class="app-title">Look up a student</div>
+        <div class="prompt">Type a student's number to see their attendance.</div>
+      </div>
+
+      <div class="card">
+        <label class="fld-label" for="stu-no">Student number</label>
+        <div class="fld is-focus" id="stu-no">002</div>
+        <div class="fld-hint">Either form works — 002 or 10009301.</div>
+      </div>
+
+      <div class="card">
+        <div class="fig-frame" role="img" aria-label="Attendance timeline for W.M.T.S. Bandara, Student Index 10009301: eight sessions Present, one Absent, one Ambiguous. Attendance: 80%.">
+          <div class="fig-title">Attendance — W.M.T.S. Bandara (10009301)</div>
+          <div class="fig-sub">CS402.3 · per-Session record</div>
+          <div class="plot">
+            <span class="anno">Attendance: 80%</span>
+            <div class="gline gl-present"></div>
+            <div class="gline gl-amb"></div>
+            <div class="gline gl-absent"></div>
+            <span class="ylab yl-present">Present</span>
+            <span class="ylab yl-amb">Ambiguous</span>
+            <span class="ylab yl-absent">Absent</span>
+            <div class="marks">
+              <div class="mcol"><span class="mark mk-p">✓</span></div>
+              <div class="mcol"><span class="mark mk-p">✓</span></div>
+              <div class="mcol"><span class="mark mk-a">✕</span></div>
+              <div class="mcol"><span class="mark mk-p">✓</span></div>
+              <div class="mcol"><span class="mark mk-p">✓</span></div>
+              <div class="mcol"><span class="mark mk-p">✓</span></div>
+              <div class="mcol"><span class="mark mk-q">?</span></div>
+              <div class="mcol"><span class="mark mk-p">✓</span></div>
+              <div class="mcol"><span class="mark mk-p">✓</span></div>
+              <div class="mcol"><span class="mark mk-p">✓</span></div>
+            </div>
+          </div>
+          <div class="xlabs">
+            <span>03.05</span><span>10.05</span><span>17.05</span><span>24.05</span><span>31.05</span>
+            <span>07.06</span><span>14.06</span><span>21.06</span><span>28.06</span><span>10.07</span>
+          </div>
+          <div class="x-title">Session</div>
+          <div class="legend">
+            <span class="lg-p">✓ Present</span>
+            <span class="lg-a">✕ Absent</span>
+            <span class="lg-q">? Ambiguous</span>
+          </div>
+        </div>
+        <div class="fig-cap">This is the same figure the class records tool draws — 10 sessions saved for this student.</div>
+      </div>
+
+      <div class="foot">Tap the graph to view it larger.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ STATE 2: NO DATA (unknown Student Index) ============ -->
+<div class="state-label">State 2 — "no data" response with the list of valid indices</div>
+<div class="phone-wrap">
+  <div class="phone">
+    <div class="speaker"></div>
+    <div class="screen">
+      <div class="st-top"><div class="st-burger" role="button" aria-label="Open navigation">☰</div></div>
+
+      <div class="app-head">
+        <div class="app-name">SAMS · Lookup</div>
+        <div class="app-title">Look up a student</div>
+        <div class="prompt">Type a student's number to see their attendance.</div>
+      </div>
+
+      <div class="card">
+        <label class="fld-label" for="stu-no-2">Student number</label>
+        <div class="fld" id="stu-no-2">048</div>
+        <div class="fld-hint">Either form works — 002 or 10009301.</div>
+      </div>
+
+      <div class="card">
+        <div class="nodata">We don't have any attendance saved for that number.</div>
+        <div class="nodata-list">
+          Students we do know:<br>
+          001 (10000409), 002 (10009301), 003 (10009315),<br>
+          004 (10009322), 005 (10009338), 006 (10009344)…
+        </div>
+      </div>
+
+      <div class="foot">Check the Signing Sheet for the student's row number, or use the 8-digit student number.</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

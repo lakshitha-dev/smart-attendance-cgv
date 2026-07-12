@@ -1,0 +1,79 @@
+# generated: 2026-07-11
+# last_updated: 2026-07-11
+# project: CGV Group Assignment
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: {project-root}/_bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; sprint-status surfaces open ones
+# - PROJECT RULE (PRD §6.3): Epic 4 stories must stay untouched until 1-6 accuracy gate is done
+# - Two-week plan: see planning-artifacts/sprint-plan.md (owners M1–M8, Day-5 gate, descope ladder)
+
+generated: 2026-07-11
+last_updated: 2026-07-12
+project: CGV Group Assignment
+project_key: NOKEY
+tracking_system: file-system
+story_location: '{project-root}/_bmad-output/implementation-artifacts'
+
+development_status:
+  epic-1: in-progress
+  1-1-run-sams-with-validated-inputs: done
+  1-2-watch-preprocessing-stages-live-and-saved: ready-for-dev
+  1-3-locate-student-table-and-signature-cells: ready-for-dev
+  1-4-classify-each-signature-cell: ready-for-dev
+  1-5-persist-attendance-and-report-results: ready-for-dev
+  1-6-prove-detection-accuracy-on-all-five-sheets: ready-for-dev
+  1-7-run-everything-on-a-fresh-machine: ready-for-dev
+  epic-1-retrospective: optional
+  epic-2: in-progress
+  2-1-query-attendance-by-either-index-form: ready-for-dev
+  2-2-render-attendance-timeline-graph: ready-for-dev
+  epic-2-retrospective: optional
+  epic-3: in-progress
+  3-1-maintain-reference-signatures: ready-for-dev
+  3-2-compare-probe-signature-and-report-verdict: ready-for-dev
+  3-3-evaluate-verification-on-protocol-split: ready-for-dev
+  epic-3-retrospective: optional
+  epic-4: in-progress
+  4-1-open-sams-in-the-browser: ready-for-dev
+  4-2-upload-and-process-with-one-tap: ready-for-dev
+  4-3-watch-pipeline-and-read-results: ready-for-dev
+  4-4-resolve-ambiguous-row-with-one-tap: ready-for-dev
+  4-5-look-up-a-student-from-the-browser: ready-for-dev
+  4-6-check-a-signature-from-the-browser: ready-for-dev
+  4-7-responsive-accessible-on-all-surfaces: ready-for-dev
+  epic-4-retrospective: optional
