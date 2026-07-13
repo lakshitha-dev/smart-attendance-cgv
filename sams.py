@@ -3,9 +3,13 @@
 import argparse
 import sys
 
+import cv2
+
+from sams_core.artifacts import save_stage
 from sams_core.errors import InputError, SamsError
 from sams_core.image_io import load_image
 from sams_core.info_file import parse_info_file, resolve_sheet_identifier
+from sams_core.pipeline import run_pipeline
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -16,9 +20,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        load_image(args.image)
+        image = load_image(args.image)
         info_file = parse_info_file(args.info_file)
         sheet_id = resolve_sheet_identifier(info_file, args.date, args.image)
+        for stage in run_pipeline(image):
+            display = stage.image if stage.image.ndim == 2 else cv2.cvtColor(stage.image, cv2.COLOR_RGB2BGR)
+            cv2.imshow(stage.label, display)
+            cv2.waitKey(1)
+            save_stage(sheet_id, stage)
+        if sys.stdin.isatty():  # no one to dismiss the windows in a non-interactive run
+            cv2.waitKey(0)
+        cv2.destroyAllWindows()
     except InputError as exc:
         print(str(exc), file=sys.stderr)
         return 2
