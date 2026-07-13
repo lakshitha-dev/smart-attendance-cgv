@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
+import numpy as np
+
 
 class AttendanceStatus(Enum):
     PRESENT = "Present"
@@ -35,3 +37,18 @@ class InfoFile:
 
     session: Session
     students: tuple[StudentRecord, ...]
+
+
+@dataclass(frozen=True)
+class StageArtifact:
+    """One labelled pipeline stage frame (PRD FR-11/FR-16, AD-2/AD-3).
+
+    `image` is display-ready uint8: 2D greyscale or 3-channel RGB (never BGR) —
+    adapters own any toolkit-specific conversion (CLI/`artifacts.py` convert
+    RGB->BGR for cv2, `st.image` consumes RGB as-is).
+    """
+
+    order: int
+    slug: str  # glossary-verbatim, e.g. "greyscale" — used in filenames and window titles
+    label: str  # glossary-verbatim display name, e.g. "Greyscale"
+    image: np.ndarray
