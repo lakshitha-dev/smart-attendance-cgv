@@ -37,3 +37,11 @@ DESKEW_MAX_LINE_GAP = 20
 DESKEW_MAX_CANDIDATE_ANGLE_DEG = 20  # ignore near-vertical lines (table's side borders)
 DESKEW_MIN_ANGLE_DEG = 0.5  # skip rotation below this angle (noise, not real skew)
 
+# Table/Grid localization (Story 1.3): detect the metadata row and student table structure.
+# Parameters tune Hough-based line detection to find the table's horizontal and vertical grid.
+LOCATE_HOUGH_THRESHOLD = 150  # threshold for Hough line detection (higher = fewer, stronger lines)
+LOCATE_MIN_LINE_LENGTH_FRACTION = 0.4  # fraction of image width/height for min line length
+LOCATE_MAX_LINE_GAP = 20  # max gap between line segments before they're broken
+LOCATE_MIN_VERTICAL_LINE_WIDTH = 0.05  # fraction of image width; lines shorter than this ignored
+LOCATE_GRID_MASK_THICKNESS = 2  # pixels to mask out around detected grid lines (no hardcoded coords; SM-C1)
+
