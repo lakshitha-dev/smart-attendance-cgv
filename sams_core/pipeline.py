@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 from sams_core import config
-from sams_core.models import StageArtifact
+from sams_core.models import SheetResult, StageArtifact
 
 StageFunction = Callable[[np.ndarray], np.ndarray]
 
@@ -153,3 +153,42 @@ def run_pipeline(image: np.ndarray) -> Iterator[StageArtifact]:
             return
         current = stage_fn(current)
         yield StageArtifact(order=order, slug=slug, label=label, image=current)
+
+
+def run_pipeline_with_localization(
+    image: np.ndarray, info_file_row_count: int
+) -> tuple[Iterator[StageArtifact], SheetResult]:
+    """Run the full pipeline through table localization (stage 6).
+
+    Args:
+        image: the raw photo (uint8 BGR from cv2.imread)
+        info_file_row_count: number of student records from the Info File
+
+    Returns:
+        (stage_iterator, sheet_result)
+        - stage_iterator: Iterator yielding StageArtifact objects for stages 1-6
+        - sheet_result: SheetResult with table structure and warnings
+    """
+    # Import locate here to avoid circular imports
+    from sams_core import locate
+
+    sheet_result_value: SheetResult | None = None
+
+    def _make_stages():
+        nonlocal sheet_result_value
+
+        current = image
+        # Stages 1-5
+        for order, slug, label, stage_fn in _REGISTRY[:5]:
+            current = stage_fn(current)
+            yield StageArtifact(order=order, slug=slug, label=label, image=current)
+
+        # Stage 6: Table localization (Story 1.3)
+        deskewed_image = current
+        sheet_result_value, overlay_image = locate.locate_table(deskewed_image, info_file_row_count)
+        yield StageArtifact(order=6, slug="table-grid", label="Table Grid", image=overlay_image)
+
+    # Collect all stages to populate sheet_result_value
+    stages_list = list(_make_stages())
+
+    return iter(stages_list), sheet_result_value

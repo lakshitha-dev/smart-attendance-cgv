@@ -52,3 +52,19 @@ class StageArtifact:
     slug: str  # glossary-verbatim, e.g. "greyscale" — used in filenames and window titles
     label: str  # glossary-verbatim display name, e.g. "Greyscale"
     image: np.ndarray
+
+
+@dataclass
+class SheetResult:
+    """Result of processing a single signed-in sheet (Story 1.3/1.4).
+
+    Tracks detected table structure, warnings (e.g., row-count mismatch),
+    and cell-level ROI data for signature verification.
+    """
+
+    warnings: list[str]  # e.g., ["Detected 5 rows, Info File has 6 students"]
+    detected_row_count: int  # dynamic count of rows detected in the table
+    metadata_row_y_range: tuple[int, int] | None  # (y0, y1) of the 4-column metadata row
+    student_table_y_range: tuple[int, int] | None  # (y0, y1) of the 5-column student table
+    detected_grid_lines: dict  # internal: (h_lines, v_lines) for masking cell ROIs
+    cell_rois: dict | None = None  # Story 1.4: per-cell inspection regions
