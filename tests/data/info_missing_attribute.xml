@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<subject code="CS402.3" name="Computer Graphics and Visualization">
+  <session date="2019-05-31" time="13:00" lecturer="Dr. Rasika Ranaweera"/>
+  <students>
+    <student no="001" index="10000409" title="Ms" name="M S Dilshanika Perera"/>
+    <student no="002" title="Mr" name="C W M A Shehan Abeyrathne"/>
+  </students>
+</subject>
