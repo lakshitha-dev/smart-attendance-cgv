@@ -3,7 +3,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from sams_core.config import SUPPORTED_IMAGE_EXTENSIONS
+from sams_core.config import MIN_IMAGE_DIMENSION_PX, SUPPORTED_IMAGE_EXTENSIONS
 from sams_core.errors import InputError
 
 
@@ -23,5 +23,11 @@ def load_image(path: str) -> np.ndarray:
     image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     if image is None:
         raise InputError(f"Image could not be read (unreadable or corrupt): {path}")
+
+    if min(image.shape[:2]) < MIN_IMAGE_DIMENSION_PX:
+        raise InputError(
+            f"Image too small to be a Signing Sheet photo ({image.shape[1]}x{image.shape[0]}): "
+            f"minimum dimension is {MIN_IMAGE_DIMENSION_PX}px"
+        )
 
     return image

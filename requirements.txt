@@ -1,3 +1,6 @@
 opencv-python==4.13.0.92
 numpy==2.5.1
 matplotlib==3.11.0
+
+# NOTE: opencv-python 5.x breaks HoughLinesP result unpacking in sams_core/pipeline.py
+# (verified 2026-07-16) - do not upgrade past 4.x without fixing _measure_skew_angle.

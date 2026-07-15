@@ -1,5 +1,5 @@
 ---
-status: review
+status: done
 epic: 1
 story: '1.2'
 title: Watch preprocessing stages live and saved
@@ -53,6 +53,34 @@ So that I can follow what SAMS did to my photo and capture report screenshots.
 - [x] Manually run all 5 sample sheets end-to-end; visually verify background exclusion + boundary-ink retention in saved artifacts
 - [x] Unit tests: stage functions (headless, pure ndarray-in/ndarray-out), registry order/slugs, `artifacts.py` file-naming/no-overwrite-across-sheets
 - [x] Run full test suite; verify AC coverage; zero `cv2.imshow` in `sams_core`
+
+### Post-Review Correction Note (2026-07-16)
+
+The Dev Agent Record below predates two later change waves and is stale on these points: `sams.py` is now 49 lines with ZERO cv2 calls — all window mechanics moved to the top-level adapter module `cli_display.py` (add it to the File List); the suite is 82 tests (~22s), not 45 (~9s); deskew now uses INTER_NEAREST + white BORDER_CONSTANT on an expanded canvas (was INTER_CUBIC/BORDER_REPLICATE same-canvas); display gates on GUI availability + the `SAMS_HEADLESS` env seam (tests/conftest.py), not `stdin.isatty()`; per-sheet output is reset at run start. The "~5s for all 5 sheets" and AD-1-budget claims remain true.
+
+### Review Findings (code review 2026-07-16)
+
+- [x] [Review][Patch] Deskew uses INTER_CUBIC, destroying the 0/255 binary invariant — grey interpolation halos are later counted as ink by `> 0` tests; use INTER_NEAREST [sams_core/pipeline.py:131]
+- [x] [Review][Patch] BORDER_REPLICATE smears edge-touching dark pixels into long fake "grid lines" in rotation-vacated corners — use BORDER_CONSTANT white [sams_core/pipeline.py:131]
+- [x] [Review][Patch] Rotation keeps the same canvas size, clipping table corners at larger angles — expand the canvas to fit the rotated frame [sams_core/pipeline.py:128]
+- [x] [Review][Patch] `cv2.imencode` success flag ignored and empty images unguarded in both writers — silent corrupt/0-byte PNGs that Epic 3 would read back as probes [sams_core/artifacts.py:19,39]
+- [x] [Review][Patch] Sheet-crop failure and degenerate crops are silent — log a warning on full-frame fallback and sanity-check the detected bbox dimensions [sams_core/pipeline.py:37]
+- [x] [Review][Patch] All Hough lines filtered out (skew > 20°, sideways photo) returns 0.0 identically to "straight" — log a warning when candidates existed but none qualified [sams_core/pipeline.py:117]
+- [x] [Review][Patch] `show_stage_live` gates on `stdin.isatty()` — a real operator with stdin redirected gets NO windows (AC1 violation), and stdin is a poor headlessness proxy; gate on GUI availability (try/except cv2.error) + explicit SAMS_HEADLESS seam for tests [cli_display.py:19]
+- [x] [Review][Patch] `stage_identity` has no range/order guard (order=0 wraps to stage 7 via negative index); `_REGISTRY[:5]` magic slice + `slug == "deskewed"` string duplicate registry knowledge — derive from the registry, guard None deskew [sams_core/pipeline.py:151,195,224]
+- [x] [Review][Patch] Re-processing a sheet leaves stale artifacts mixed with new ones (fewer rows → orphan crops persist) — reset the per-sheet output dir at run start [sams_core/artifacts.py:13]
+- [x] [Review][Patch] `print_run_summary`/window-hold run outside the AD-6 handler (their exceptions escape as stack traces) and KeyboardInterrupt bypasses `except Exception` entirely [sams.py:40]
+- [x] [Review][Patch] Hough rho/theta resolution literals (`1`, `np.pi/360`) in stage code — genuine tunables belonging in config.py per AC3 [sams_core/pipeline.py:103]
+- [x] [Review][Patch] `medianBlur`/`adaptiveThreshold` kernel constants have "must be odd" comments but no validation, and no minimum-image-size guard exists — cryptic cv2 asserts on bad config/tiny images [sams_core/config.py:16, sams_core/image_io.py]
+- [x] [Review][Patch] `run_pipeline` raises opaque cv2.error on non-3-channel library input — raise a clear InputError [sams_core/pipeline.py:60]
+- [x] [Review][Patch] AC2 crop test covers only sheet 1 of 5, and the non-ASCII-path motivation for the imencode+tofile pattern has no test — extend both [tests/test_pipeline.py:67, tests/test_artifacts.py]
+- [x] [Review][Patch] Dev Agent Record is stale (describes 49-line sams.py with inline cv2 calls, 45 tests/~9s; File List omits cli_display.py) — append a correction note [this file]
+- [x] [Review][Patch] Architecture stack note claims opencv 5.0.0.93 is "verified-compatible" but 5.0 breaks `HoughLinesP` unpacking in `_measure_skew_angle` — correct the note, pin comment in requirements.txt [ARCHITECTURE-SPINE.md stack table]
+- [x] [Review][Defer] Sideways (90°-rotated) photos and perspective keystone pass through undetected/uncorrected — orientation detection + quad warp are NFR-1 hardening beyond the five-sample scope; revisit at Story 1.6 evaluation [sams_core/pipeline.py:92]
+- [x] [Review][Defer] Fixed-pixel kernels/blocks (25px morph, 35px threshold block, 5px median) assume ~4000px photos — resolution-relative scaling needed before accepting compressed/low-res inputs [sams_core/config.py:16-37]
+- [x] [Review][Defer] Hard shadow boundaries binarize as long false-ink stripes (can skew deskew voting and pollute cells) — adaptive-block tuning or illumination flattening, NFR-1 hardening [sams_core/pipeline.py:82]
+- [x] [Review][Defer] HSV saturation crop can invert under warm lighting / edge-to-edge sheets (Otsu on unimodal histograms) — bimodality/page-likeness check is future robustness work; mitigated now by dimension sanity + fallback warning [sams_core/pipeline.py:30]
+- [x] [Review][Defer] Crop bbox and rotation matrix are discarded, so later-stage coordinates can't be mapped back to the original photo — traceability nice-to-have [sams_core/pipeline.py:63]
 
 ## Dependencies
 

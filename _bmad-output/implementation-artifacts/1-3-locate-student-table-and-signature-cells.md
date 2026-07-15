@@ -1,5 +1,5 @@
 ---
-status: ready-for-dev
+status: done
 epic: 1
 story: '1.3'
 title: Locate the student table and Signature Cells
@@ -40,6 +40,21 @@ So that each signature is checked against the correct student row.
 - **Registers the 6th stage** ("detected table grid") in the AD-3 registry — overlay drawn on a copy, RGB uint8.
 - **AD-6:** row-count mismatch is a warning in `SheetResult.warnings`, never an exception; processing continues matched by row order.
 - **Tunables** (line-detection params, band thresholds) → `config.py` only; no pixel coordinates (SM-C1 / NFR-8).
+
+## Tasks / Subtasks
+
+### Review Findings (code review 2026-07-13, fix-localization-detection)
+
+- [x] [Review][Patch] Grid mask absorbs long handwriting strokes — built from ALL long ink runs on the page, not just detected table lines; a straight signature underline ≥ width//15 px is subtracted from ink and erased from crops [sams_core/locate.py:178]
+- [x] [Review][Patch] `cell_rois` published even for fallback-selected non-5-column tables — a long vertical pen stroke can become a "column" and the signature column collapses to a sliver [sams_core/locate.py:237]
+- [x] [Review][Patch] Rewritten locate.py has zero unit tests (DoD violation; the diff also deleted the only scripts exercising it) — add tests/test_locate.py covering 5-below-4 selection, header exclusion, dynamic rows, mismatch warning [tests/]
+- [x] [Review][Patch] Per-region drift dilation biases border-line positions ~7px inward (mask cropped before dilating) and repeats full-frame work per candidate region — dilate masks once, globally [sams_core/locate.py:97]
+- [x] [Review][Patch] `_grid_mask` recomputes the h|v OR and dilation `_find_tables` already produced — compute the combined grid once [sams_core/locate.py:114,178]
+- [x] [Review][Patch] No-table case omits the row-count-mismatch warning the AC requires (only the generic "no structure" message) [sams_core/locate.py:230]
+- [x] [Review][Patch] `table_bbox` published from the join-dilated component stats, overshooting the printed table ~5px/side — derive from line extents [sams_core/locate.py:120]
+- [x] [Review][Patch] `models.py` still documents `detected_grid_lines` as sheet-global; it is now student-table-only [sams_core/models.py:69]
+- [x] [Review][Defer] Metadata + student tables merging into one component (vertical gap ≤ ~11px join kernel) leaves leading metadata bands as phantom student rows with only generic warnings — needs structural handling; mitigated now by explicit warning when no separate metadata band is found; revisit during Story 1.6 evaluation [sams_core/locate.py:115]
+- [x] [Review][Defer] Deskew (Hough, DESKEW_*) and locate (morphology, LOCATE_*) are two independently tuned detectors for the same table lines — unify into one line-evidence helper later [sams_core/pipeline.py:92]
 
 ## Dependencies
 

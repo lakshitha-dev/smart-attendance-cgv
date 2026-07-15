@@ -155,7 +155,7 @@ Versions verified on the web 2026-07-10; code owns this once it exists.
 | Name | Version |
 | --- | --- |
 | Python | 3.12/3.13 ONLY (numpy 2.5.1 requires >=3.12) |
-| opencv-python | 4.13.0.92 (current 4.x, primary pin); opencv-python 5.0.0.93 verified-compatible optional upgrade — core calls used (imread/cvtColor/threshold/findContours) identical |
+| opencv-python | 4.13.0.92 (primary pin). ~~5.0.0.93 verified-compatible~~ **CORRECTED 2026-07-16: opencv 5.0 breaks `HoughLinesP` result unpacking in `sams_core/pipeline.py` (verified live during story 1.2 code review) — do NOT upgrade; keep the 4.13 pin** |
 | numpy | 2.5.1 |
 | matplotlib | 3.11.0 (exact pin) |
 | streamlit | 1.59.1 (requirements-web.txt only) — known upstream wart streamlit#11797: deep-linking sub-pages with custom [theme] may bounce to default page; non-blocking |

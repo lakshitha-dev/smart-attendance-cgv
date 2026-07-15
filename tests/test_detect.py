@@ -164,11 +164,11 @@ def test_one_cell_result_per_detected_row():
 
 
 def test_expected_row_count_trims_leading_metadata_and_header_bands():
-    """Story 1.3 lumps the Metadata Row's data line and the Student Table's own
-    header line in as if they were student rows 1 and 2 (always leading, always
-    irregular height - see sams_core/detect.py `_row_bands`). When the Info
-    File's real student count is smaller than the detected band count, only
-    the trailing bands (the genuine, uniform-height student rows) are kept."""
+    """FALLBACK PATH ONLY (no cell_rois supplied): when a caller provides raw
+    h_lines, leading bands are header/metadata lines rather than student rows,
+    so when the Info File's student count is smaller than the band count only
+    the trailing bands (the genuine student rows) are kept. The production
+    path receives header-excluded rows via cell_rois and ignores this trim."""
     h_lines = [0, 60, 95, 145, 195, 245]  # 5 bands: 2 leading (irregular) + 3 real rows
     image = _blank_binary_image()
     image = _draw_ink(image, y0=100, y1=140, x0=210, x1=260)  # ink in the first "real" row
@@ -188,6 +188,71 @@ def test_expected_row_count_no_op_when_band_count_already_matches():
     results, _ = detect.detect_signatures(image, _sheet_result(), expected_row_count=len(H_LINES) - 1)
 
     assert len(results) == len(H_LINES) - 1
+
+
+# --- Production path: cell_rois supplied by locate (Story 1.3) -------------------
+
+
+def _sheet_result_with_cell_rois(rows=None, signature_column=(200, 260), grid_mask=None) -> SheetResult:
+    """SheetResult as the real pipeline builds it: geometry via cell_rois."""
+    default_rows = [(100, 150), (150, 200), (200, 250), (250, 300)]
+    result = _sheet_result(grid_mask=grid_mask)
+    result.cell_rois = {
+        "rows": default_rows if rows is None else rows,
+        "signature_column": signature_column,
+        "table_bbox": (0, 100, 260, 300),
+    }
+    return result
+
+
+def test_cell_rois_rows_are_used_verbatim_and_straddle_attributes_to_one_row():
+    image = _blank_binary_image()
+    image = _draw_ink(image, y0=120, y1=155, x0=210, x1=250)  # straddles rows 0/1, majority row 0
+
+    results, _ = detect.detect_signatures(image, _sheet_result_with_cell_rois())
+
+    rows_with_ink = [r.row_index for r in results if r.ink_coverage > 0]
+    assert rows_with_ink == [0]
+    assert len(results) == 4
+
+
+def test_empty_cell_rois_rows_yields_zero_results_not_fallback():
+    """Regression: `rows: []` (header-only table) must NOT fall back to raw
+    h_lines and resurrect the header band as a phantom student row."""
+    image = _blank_binary_image()
+    image = _draw_ink(image, y0=110, y1=140, x0=210, x1=260)  # ink that a fallback would count
+
+    results, _ = detect.detect_signatures(image, _sheet_result_with_cell_rois(rows=[]))
+
+    assert results == []
+
+
+def test_margin_spillover_is_captured_but_denominator_stays_unpadded():
+    """Ink past the printed column border (within the +margin padding) counts
+    toward the cell, while coverage divides by the UN-padded cell area."""
+    image = _blank_binary_image()
+    image = _draw_ink(image, y0=110, y1=140, x0=265, x1=290)  # right of column x1=260, inside padding
+
+    results, _ = detect.detect_signatures(image, _sheet_result_with_cell_rois())
+    by_row = {r.row_index: r for r in results}
+
+    ink_area = (140 - 110) * (290 - 265)
+    unpadded_area = (260 - 200) * (150 - 100)
+    assert by_row[0].ink_coverage == pytest.approx(ink_area / unpadded_area)
+    assert by_row[0].roi == (200, 100, 260, 150)  # un-dilated ROI, documented contract
+
+
+def test_crops_have_grid_lines_whited_out():
+    """Crops are Epic 3's probes: printed border pixels must not appear in them."""
+    image = _blank_binary_image()
+    grid_mask = np.zeros((HEIGHT, WIDTH), dtype=np.uint8)
+    grid_mask[148:152, :] = 255
+    image = _draw_ink(image, y0=148, y1=152, x0=200, x1=260)  # ink exactly on the printed line
+
+    results, _ = detect.detect_signatures(image, _sheet_result_with_cell_rois(grid_mask=grid_mask))
+
+    for result in results:
+        assert result.crop.min() == 255, "printed grid ink leaked into a saved crop"
 
 
 # --- Crops (Story 1.4 AD-10 / Epic 3 probes) -------------------------------------
@@ -217,4 +282,15 @@ def test_save_crops_with_student_indices_names_by_index(tmp_path):
     paths = detect.save_crops("2019-05-31", results, student_indices=indices)
 
     assert paths[0].name == f"{indices[0]}.png"
+    assert all(path.is_file() for path in paths)
+
+
+def test_save_crops_short_index_list_falls_back_to_ordinal_without_error(tmp_path):
+    image = _blank_binary_image()
+    results, _ = detect.detect_signatures(image, _sheet_result())
+
+    paths = detect.save_crops("2019-05-31", results, student_indices=["10009301"])  # shorter than rows
+
+    assert paths[0].name == "10009301.png"
+    assert all(p.name == f"{i + 2:03d}.png" for i, p in enumerate(paths[1:]))
     assert all(path.is_file() for path in paths)

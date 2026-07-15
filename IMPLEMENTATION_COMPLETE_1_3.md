@@ -1,3 +1,5 @@
+> **⚠️ OUTDATED (2026-07-13):** This document describes the original Hough-based Story 1.3 implementation. `sams_core/locate.py` was rewritten with morphological table detection on branch `fix-localization-detection` — the `LOCATE_HOUGH_*` constants named below no longer exist (see the `LOCATE_*` block in `sams_core/config.py` for current tunables), and the root scripts `test_story_1_3.py` / `test_integration.py` / `demo_artifact_generation.py` were removed (superseded by `tests/test_locate.py` and the `tests/` suite). Kept for history; do not follow its tuning instructions.
+
 # Story 1.3 Implementation Complete ✅
 
 ## Summary

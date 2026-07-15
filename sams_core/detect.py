@@ -25,6 +25,7 @@ import numpy as np
 
 from sams_core import artifacts, config
 from sams_core.models import AttendanceStatus, SheetResult, StageArtifact
+from sams_core.pipeline import stage_identity
 
 _STATUS_COLOR = {
     # BGR-independent: these are RGB tuples, matching StageArtifact's RGB contract.
@@ -62,50 +63,63 @@ class _RowBand:
 def _signature_column_bounds(sheet_result: SheetResult, width: int) -> tuple[int, int]:
     """Return (x0, x1) of the Signature column, dilated into the right margin.
 
-    Prefers the last detected vertical grid line (Story 1.3) as the column's
-    left edge; falls back to a documented fraction of the image width when no
-    vertical lines were detected (SM-C1: no per-sheet pixel coordinates).
+    Preferred source is Story 1.3's `cell_rois["signature_column"]` — the span
+    between the student table's last two vertical grid lines — extended right
+    by the documented spillover padding (PRD FR-4: ink overruns into the page
+    margin still belongs to the cell). Fallbacks, in order: the last detected
+    vertical line, then a documented fraction of the image width (SM-C1: no
+    per-sheet pixel coordinates).
     """
+    column = (sheet_result.cell_rois or {}).get("signature_column")
+    if column:
+        x0, x1 = column
+        return max(0, x0), min(width, x1 + config.DETECT_RIGHT_MARGIN_PADDING_PX)
+
     v_lines = sheet_result.detected_grid_lines.get("v_lines") or []
-    if v_lines:
-        x0 = v_lines[-1]
+    if len(v_lines) >= 2:
+        x0 = v_lines[-2]  # the Signature column spans the LAST TWO vertical lines
+    elif v_lines:
+        x0 = v_lines[-1]  # single known line: treat it as the column's left edge
     else:
         x0 = int(width * config.DETECT_SIGNATURE_COLUMN_FALLBACK_FRACTION)
 
-    x1 = min(width, width + config.DETECT_RIGHT_MARGIN_PADDING_PX)  # margin already = image edge
-    return max(0, x0), x1
+    return max(0, x0), width
 
 
 def _row_bands(sheet_result: SheetResult, height: int, expected_row_count: int | None = None) -> list[_RowBand]:
     """Return the student-table row bands, each dilated vertically for spillover.
 
-    Story 1.3's `student_table_y_range` starts right after the Metadata Row's
-    header line, so it also captures the Metadata Row's own DATA line (date/
-    time/lecturer + Lecturer's Signature) and the Student Table's column-header
-    line ("No | Student No | ... | Signature") as if they were student rows -
-    both always appear first, with irregular heights, ahead of the genuine,
-    uniformly-sized student rows (observed on all five sample sheets).
+    Preferred source is Story 1.3's `cell_rois["rows"]`: the real per-student
+    bands, already header-excluded and in row order — used verbatim, no
+    trimming heuristics.
 
-    When `expected_row_count` (the Info File's student count) is smaller than
-    the number of detected bands, only the LAST `expected_row_count` bands are
-    kept - those are consistently the real per-student Signature Cells - and
-    re-indexed from 0 so `row_index` still lines up with Story 1.5's row-order
-    mapping. This does not touch Story 1.3's row-count-mismatch warning; that
-    still surfaces via `SheetResult.warnings` unchanged.
+    Fallback (callers that provide only raw `h_lines`, e.g. synthetic test
+    fixtures): bands are consecutive h-line pairs inside
+    `student_table_y_range`, and when `expected_row_count` is smaller than the
+    band count, only the LAST `expected_row_count` bands are kept and
+    re-indexed from 0 — leading bands in raw-line input are header/metadata
+    lines, not student rows. The row-count-mismatch warning still surfaces via
+    `SheetResult.warnings` unchanged.
     """
-    if sheet_result.student_table_y_range is None:
-        return []
+    rows = (sheet_result.cell_rois or {}).get("rows")
+    if rows is not None:
+        # `[]` is a real answer (a table whose only band was the header row) —
+        # it must yield zero cells, never fall back and resurrect the header.
+        row_edges = [(int(top), int(bottom)) for top, bottom in rows]
+    else:
+        if sheet_result.student_table_y_range is None:
+            return []
 
-    y0, y1 = sheet_result.student_table_y_range
-    h_lines = sorted(
-        y for y in (sheet_result.detected_grid_lines.get("h_lines") or []) if y0 <= y <= y1
-    )
-    if len(h_lines) < 2:
-        return []
+        y0, y1 = sheet_result.student_table_y_range
+        h_lines = sorted(
+            y for y in (sheet_result.detected_grid_lines.get("h_lines") or []) if y0 <= y <= y1
+        )
+        if len(h_lines) < 2:
+            return []
 
-    row_edges = list(zip(h_lines, h_lines[1:]))
-    if expected_row_count is not None and len(row_edges) > expected_row_count > 0:
-        row_edges = row_edges[-expected_row_count:]
+        row_edges = list(zip(h_lines, h_lines[1:]))
+        if expected_row_count is not None and len(row_edges) > expected_row_count > 0:
+            row_edges = row_edges[-expected_row_count:]
 
     dilation = config.DETECT_CELL_ROW_DILATION_PX
     bands = []
@@ -193,9 +207,9 @@ def _draw_inspection_overlay(
     overlay = cv2.cvtColor(base_image, cv2.COLOR_GRAY2RGB) if base_image.ndim == 2 else base_image.copy()
     x0, x1 = column_bounds
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 1.1
-    thickness = 3
-    padding = 10
+    font_scale = config.DETECT_OVERLAY_FONT_SCALE
+    thickness = config.DETECT_OVERLAY_TEXT_THICKNESS
+    padding = config.DETECT_OVERLAY_PADDING_PX
 
     for result in results:
         _, roi_y0, _, roi_y1 = result.roi
@@ -237,13 +251,12 @@ def detect_signatures(
         binary_image: binarized/deskewed image, post grid-line masking is
             applied internally via `sheet_result.detected_grid_lines["mask"]`
             (Story 1.3, AD-8).
-        sheet_result: table structure detected in Story 1.3.
-        expected_row_count: the Info File's student count. When given and
-            smaller than the number of bands Story 1.3 detected, only the
-            trailing `expected_row_count` bands are treated as real Signature
-            Cells (see `_row_bands`) - without this, the Metadata Row's
-            signature line and the Student Table's own header line get
-            misdetected as student rows 1 and 2.
+        sheet_result: table structure detected in Story 1.3. When its
+            `cell_rois` carries `rows`/`signature_column`, those are used
+            verbatim (the real, header-excluded student cells).
+        expected_row_count: the Info File's student count. Only consulted on
+            the raw-`h_lines` fallback path (see `_row_bands`); ignored when
+            `cell_rois` rows are present.
 
     Returns:
         (cell_results, inspection_stage)
@@ -261,6 +274,12 @@ def detect_signatures(
         ink = cv2.bitwise_and(ink, cv2.bitwise_not(grid_mask))
     ink_mask = (ink > 0).astype(np.uint8) * 255
 
+    # Crop source: the binarized sheet with the printed grid whited out, so a
+    # saved crop shows the signature ink only - not the cell's border lines.
+    # NOT(ink_mask) is exactly that image (white everywhere ink was removed),
+    # so crops always depict the same ink the classifier measured (AD-10).
+    crop_source = cv2.bitwise_not(ink_mask)
+
     column_x0, column_x1 = _signature_column_bounds(sheet_result, width)
     bands = _row_bands(sheet_result, height, expected_row_count)
 
@@ -271,15 +290,21 @@ def detect_signatures(
 
     per_row_ink = _attribute_components(column_ink_mask, bands)
 
+    # Coverage denominator = the cell's own, UN-dilated ROI area (config.py
+    # documents the thresholds against this definition). The +margin padding
+    # in column_x1 exists to CAPTURE spillover ink, not to grow the cell.
+    column = (sheet_result.cell_rois or {}).get("signature_column")
+    cell_x1 = int(column[1]) if column else column_x1
+
     results: list[CellResult] = []
     for band in bands:
-        roi = (column_x0, band.y0, column_x1, band.y1)
-        cell_area = max(1, (column_x1 - column_x0) * (band.y1 - band.y0))
+        roi = (column_x0, band.y0, cell_x1, band.y1)
+        cell_area = max(1, (cell_x1 - column_x0) * (band.y1 - band.y0))
         attributed_pixels = int(np.count_nonzero(per_row_ink[band.row_index]))
         coverage = attributed_pixels / cell_area
         status = _classify(coverage)
 
-        crop = binary_image[band.dilated_y0:band.dilated_y1, column_x0:column_x1]
+        crop = crop_source[band.dilated_y0:band.dilated_y1, column_x0:column_x1]
 
         results.append(
             CellResult(
@@ -292,9 +317,8 @@ def detect_signatures(
         )
 
     inspection_image = _draw_inspection_overlay(binary_image, (column_x0, column_x1), results)
-    inspection_stage = StageArtifact(
-        order=7, slug="per-cell-inspection", label="Per-Cell Inspection", image=inspection_image
-    )
+    order, slug, label = stage_identity(7)  # AD-3: identity lives in the registry
+    inspection_stage = StageArtifact(order=order, slug=slug, label=label, image=inspection_image)
 
     return results, inspection_stage
 
@@ -313,9 +337,9 @@ def save_crops(sheet_id: str, cell_results: list[CellResult], student_indices: l
     """
     paths = []
     for result in cell_results:
-        if student_indices is not None:
+        if student_indices is not None and result.row_index < len(student_indices):
             identifier = student_indices[result.row_index]
         else:
-            identifier = f"{result.row_index + 1:03d}"
+            identifier = f"{result.row_index + 1:03d}"  # ordinal fallback, never IndexError
         paths.append(artifacts.save_crop(sheet_id, identifier, result.crop))
     return paths

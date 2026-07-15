@@ -63,8 +63,12 @@ class SheetResult:
     """
 
     warnings: list[str]  # e.g., ["Detected 5 rows, Info File has 6 students"]
-    detected_row_count: int  # dynamic count of rows detected in the table
+    detected_row_count: int  # dynamic count of STUDENT rows (header excluded)
     metadata_row_y_range: tuple[int, int] | None  # (y0, y1) of the 4-column metadata row
     student_table_y_range: tuple[int, int] | None  # (y0, y1) of the 5-column student table
-    detected_grid_lines: dict  # internal: (h_lines, v_lines) for masking cell ROIs
-    cell_rois: dict | None = None  # Story 1.4: per-cell inspection regions
+    # internal: "mask" = printed-grid pixels (table lines only, image-sized);
+    # "h_lines"/"v_lines" = the SELECTED STUDENT TABLE's lines (not sheet-global).
+    detected_grid_lines: dict
+    # Published only for a trusted 5-column table: {"rows": [(y0, y1)...] student
+    # rows in order (header excluded), "signature_column": (x0, x1), "table_bbox"}.
+    cell_rois: dict | None = None
