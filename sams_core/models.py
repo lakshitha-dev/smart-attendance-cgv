@@ -40,6 +40,27 @@ class InfoFile:
 
 
 @dataclass(frozen=True)
+class AttendanceRecord:
+    """One student's attendance outcome for one Signing Sheet (FR-5, AD-2).
+
+    Carries the Session/Subject metadata alongside the classification so a
+    persisted Attendance Record is self-describing. `student_index` is always
+    the canonical 8-digit Student Index (AD-4). `status` is first-class:
+    Ambiguous is never coerced to Present/Absent.
+    """
+
+    student_index: str
+    student_name: str
+    sheet_id: str
+    status: AttendanceStatus
+    subject_code: str
+    subject_name: str
+    session_time: str | None = None
+    lecturer: str | None = None
+    resolved_by_operator: bool = False
+
+
+@dataclass(frozen=True)
 class StageArtifact:
     """One labelled pipeline stage frame (PRD FR-11/FR-16, AD-2/AD-3).
 
@@ -68,3 +89,6 @@ class SheetResult:
     student_table_y_range: tuple[int, int] | None  # (y0, y1) of the 5-column student table
     detected_grid_lines: dict  # internal: (h_lines, v_lines) for masking cell ROIs
     cell_rois: dict | None = None  # Story 1.4: per-cell inspection regions
+    # Story 1.5 (additive, defaults required so 1.3/1.4 constructions keep working):
+    sheet_id: str | None = None  # resolved Sheet Identifier (AD-11)
+    records: tuple["AttendanceRecord", ...] = ()  # one per Student Record (FR-5)

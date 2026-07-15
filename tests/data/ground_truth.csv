@@ -1,0 +1,57 @@
+# SAMS ground truth — Story 1.6 (SM-1), adjudicated from the five sample sheet photos.
+#
+# PROTOCOL (PRD 6.3 / AD-9): this file is committed BEFORE any threshold tuning.
+# Nothing in config.py may be tuned against sheets that are not keyed here, and no
+# entry below may be edited to make a failing detector pass — that inverts the gate.
+#
+# sheet_id      ISO 8601 Sheet Identifier (matches session/@date in the Info File)
+# student_index canonical 8-digit Student Index (the only key form — AD-4)
+# status        Present | Absent | Disputed
+#
+# Disputed = the adjudicators could not agree what the sheet actually shows.
+# Disputed rows are excluded from the SM-1 score and reported separately; they are
+# never counted as errors. Disputed is NOT the same as the engine's Ambiguous status:
+# Ambiguous is a detector output, Disputed is a statement about the paper itself.
+#
+# Adjudication notes (visual inspection of the Signature column, full resolution):
+#   2019-05-31 (1.jpeg) — all six rows carry a signature.
+#   2019-06-21 (2.jpeg) — all six rows carry a signature.
+#   2019-06-28 (3.jpeg) — rows 2 and 3 are empty; the remaining four are signed.
+#   2019-07-05 (4.jpeg) — row 2 is empty; row 4 holds only a faint speck of pink
+#                         ink, no stroke, adjudicated Absent. Row 3's signature is
+#                         drawn high and crosses the row 2/3 rule — it belongs to
+#                         row 3 (same student signs identically on sheets 1, 2, 5).
+#   2019-07-12 (5.jpeg) — all six rows carry a signature.
+# No row was judged Disputed: every cell on all five sheets is unambiguous to the eye.
+#
+sheet_id,student_index,status
+2019-05-31,10000409,Present
+2019-05-31,10009301,Present
+2019-05-31,10009302,Present
+2019-05-31,10009303,Present
+2019-05-31,10009304,Present
+2019-05-31,10009306,Present
+2019-06-21,10000409,Present
+2019-06-21,10009301,Present
+2019-06-21,10009302,Present
+2019-06-21,10009303,Present
+2019-06-21,10009304,Present
+2019-06-21,10009306,Present
+2019-06-28,10000409,Present
+2019-06-28,10009301,Absent
+2019-06-28,10009302,Absent
+2019-06-28,10009303,Present
+2019-06-28,10009304,Present
+2019-06-28,10009306,Present
+2019-07-05,10000409,Present
+2019-07-05,10009301,Absent
+2019-07-05,10009302,Present
+2019-07-05,10009303,Absent
+2019-07-05,10009304,Present
+2019-07-05,10009306,Present
+2019-07-12,10000409,Present
+2019-07-12,10009301,Present
+2019-07-12,10009302,Present
+2019-07-12,10009303,Present
+2019-07-12,10009304,Present
+2019-07-12,10009306,Present

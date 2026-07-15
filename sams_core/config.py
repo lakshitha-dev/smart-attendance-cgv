@@ -56,7 +56,19 @@ LOCATE_GRID_MASK_THICKNESS = 2  # pixels to mask out around detected grid lines 
 # (no vertical lines detected), fall back to a fixed fraction of the sheet's
 # width, since the Signature column is consistently the last ~1/5th to 1/4th
 # of a 5-column row on the sample sheets.
-DETECT_SIGNATURE_COLUMN_FALLBACK_FRACTION = 0.78  # left edge as a fraction of image width
+# Story 1.6 tuning (see TUNING_LOG.md): visual inspection of all five sample
+# sheets places the true Signature column's left edge at roughly 0.72-0.85 of
+# the width. 0.72 (the left edge of that observed range) is used here rather
+# than the previous 0.78, since 0.78 was measured to start partway INSIDE the
+# column and truncate the left half of every signature. This does not fix the
+# underlying defect - Story 1.3's vertical-line detection returns zero v_lines
+# on all five real sheets, so this fallback is exercised every time - but it is
+# the best honest value within the diagnosed true range. Moving further left,
+# into the Student Name column, produces higher measured "accuracy" on these
+# five sheets purely because that column's ink correlates with attendance by
+# coincidence, not because it measures signatures; that is overfitting to the
+# sample, not a fix, so it is deliberately not applied here (SM-C1).
+DETECT_SIGNATURE_COLUMN_FALLBACK_FRACTION = 0.72  # left edge as a fraction of image width
 
 # Spillover margin (PRD FR-4): the Signature Cell ROI is dilated outward so ink
 # that overruns the printed grid line - including into the blank right margin

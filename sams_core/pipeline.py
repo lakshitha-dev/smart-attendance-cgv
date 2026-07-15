@@ -9,14 +9,16 @@ are reserved for Stories 1.3/1.4.
 """
 
 from collections.abc import Callable, Iterator
+from pathlib import Path
 
 import cv2
 import numpy as np
 
 from sams_core import config
-from sams_core.models import SheetResult, StageArtifact
+from sams_core.models import InfoFile, SheetResult, StageArtifact
 
 StageFunction = Callable[[np.ndarray], np.ndarray]
+StageCallback = Callable[[StageArtifact], None]
 
 
 def _find_sheet_bbox(rgb_image: np.ndarray) -> tuple[int, int, int, int] | None:
@@ -223,3 +225,92 @@ def run_pipeline_with_detection(
     stages_list.append(inspection_stage)
 
     return iter(stages_list), sheet_result, cell_results
+
+
+# Signature-image kind registered for probe crops in the DB (AD-10).
+_PROBE_IMAGE_KIND = "probe"
+
+
+def process_sheet(
+    image: str | Path | bytes,
+    info_file: InfoFile,
+    sheet_id_override: str | None = None,
+    overwrite: bool = False,
+    on_stage: StageCallback | None = None,
+    repository=None,
+) -> SheetResult:
+    """The ONE engine entry point both frontends call (AD-12).
+
+    Runs the full pipeline, maps detections to Student Records, then persists on
+    success — and only on success. Persistence is the LAST step, after every
+    stage, mapping, and crop write has completed, so a partial iteration or an
+    aborted run (e.g. `on_stage` raising) never persists (AD-12).
+
+    Args:
+        image: a filesystem path (CLI) or raw bytes (Web upload) — AD-12.
+        info_file: the parsed Info File (Session metadata + Student Records).
+        sheet_id_override: operator-supplied Sheet Identifier (CLI `--date` /
+            Web date field), used only when the Info File omits its date (AD-11).
+        overwrite: replace operator resolutions when re-processing (AD-4).
+        on_stage: display side channel — invoked once per StageArtifact, in
+            registry order (AD-3/AD-7). The engine never opens a window itself.
+        repository: an `AttendanceRepository` (injectable for tests); defaults
+            to one bound to `config.DB_PATH`.
+
+    Returns:
+        A `SheetResult` carrying `sheet_id`, `records` (one per Student Record),
+        and `warnings` (non-fatal anomalies such as a row-count mismatch).
+    """
+    from sams_core import artifacts, detect, mapping
+    from sams_core.image_io import load_image, load_image_bytes
+    from sams_core.info_file import resolve_sheet_identifier
+    from sams_core.repository import AttendanceRepository
+
+    # 1. Load the image (path or bytes) via the shared InputError path.
+    if isinstance(image, (bytes, bytearray)):
+        raw = load_image_bytes(bytes(image))
+        image_path = None
+    else:
+        image_path = str(image)
+        raw = load_image(image_path)
+
+    # 2. Resolve the Sheet Identifier BEFORE the pipeline runs (AD-11).
+    sheet_id = resolve_sheet_identifier(info_file, sheet_id_override, image_path)
+
+    # 3. Run the pipeline; emit each stage to the display side channel and save it.
+    stages, sheet_result, cell_results = run_pipeline_with_detection(
+        raw, len(info_file.students)
+    )
+    for stage in stages:
+        if on_stage is not None:
+            on_stage(stage)
+        artifacts.save_stage(sheet_id, stage)
+
+    # 4. Map detections -> Attendance Records by row order (one per Student Record).
+    records, mapping_warnings = mapping.map_detections_to_students(
+        cell_results, info_file, sheet_id
+    )
+    sheet_result.sheet_id = sheet_id
+    sheet_result.records = tuple(records)
+    for warning in mapping_warnings:
+        if warning not in sheet_result.warnings:
+            sheet_result.warnings.append(warning)
+
+    # 5. Save crops named by Student Index (falls back to row ordinals on mismatch).
+    student_indices = mapping.student_indices_in_row_order(
+        cell_results, info_file.students
+    )
+    crop_paths = detect.save_crops(sheet_id, cell_results, student_indices=student_indices)
+
+    # 6. Persist LAST, after everything above succeeded (AD-12).
+    repo = repository if repository is not None else AttendanceRepository()
+    repo.upsert_students(info_file.students)
+    repo.save_attendance(records, overwrite=overwrite)
+    if student_indices is not None:
+        for cell, path in zip(cell_results, crop_paths):
+            repo.register_signature_image(
+                student_indices[cell.row_index], sheet_id, _PROBE_IMAGE_KIND, path
+            )
+
+    # 7. Return the SheetResult carrying sheet_id, records, and warnings.
+    return sheet_result
