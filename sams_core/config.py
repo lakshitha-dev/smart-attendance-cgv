@@ -45,3 +45,31 @@ LOCATE_MAX_LINE_GAP = 20  # max gap between line segments before they're broken
 LOCATE_MIN_VERTICAL_LINE_WIDTH = 0.05  # fraction of image width; lines shorter than this ignored
 LOCATE_GRID_MASK_THICKNESS = 2  # pixels to mask out around detected grid lines (no hardcoded coords; SM-C1)
 
+# Signature detection & classification (Story 1.4): measure ink per Signature Cell.
+# All values below are PROVISIONAL (SM-C1) - real tuning happens in Story 1.6 once
+# ground_truth.csv exists; these defaults are picked to be safely conservative on
+# the five sample sheets in the meantime.
+
+# Signature column: the Signature Cell is the rightmost column of the 5-column
+# Student Table. When Story 1.3's vertical-line detection succeeds, the last
+# detected vertical line is used as the column's left edge. When it does not
+# (no vertical lines detected), fall back to a fixed fraction of the sheet's
+# width, since the Signature column is consistently the last ~1/5th to 1/4th
+# of a 5-column row on the sample sheets.
+DETECT_SIGNATURE_COLUMN_FALLBACK_FRACTION = 0.78  # left edge as a fraction of image width
+
+# Spillover margin (PRD FR-4): the Signature Cell ROI is dilated outward so ink
+# that overruns the printed grid line - including into the blank right margin
+# of the page - is still attributed to a cell instead of being lost.
+DETECT_CELL_ROW_DILATION_PX = 12  # vertical dilation applied to each row band
+DETECT_RIGHT_MARGIN_PADDING_PX = 60  # extend the signature column past the last vertical line
+
+# Connected-component noise floor: ignore specks (stray dots, paper texture,
+# residual grid-mask fragments) below this pixel area before attribution runs.
+DETECT_MIN_COMPONENT_AREA_PX = 25
+
+# Classification bands (AD-5): coverage = attributed ink pixels / the cell's own
+# (un-dilated) ROI area. coverage >= PRESENT -> Present, <= ABSENT -> Absent,
+# otherwise Ambiguous (a first-class result, never coerced either way).
+INK_COVERAGE_PRESENT_THRESHOLD = 0.020
+INK_COVERAGE_ABSENT_THRESHOLD = 0.006

@@ -20,3 +20,23 @@ def save_stage(sheet_id: str, stage: StageArtifact) -> Path:
     encoded.tofile(str(out_path))
 
     return out_path
+
+
+def save_crop(sheet_id: str, identifier: str, image) -> Path:
+    """Save one per-student signature-cell crop (Story 1.4, AD-10).
+
+    Written to `output/<Sheet Identifier>/crops/<identifier>.png` — NOT a
+    StageArtifact (crops are per-student, not per-pipeline-stage). `identifier`
+    is normally the canonical 8-digit Student Index once it is known (Epic 3
+    reads these back as verification probes); callers without a resolved
+    index yet may pass a row ordinal instead.
+    """
+    crops_dir = OUTPUT_DIR / sheet_id / "crops"
+    crops_dir.mkdir(parents=True, exist_ok=True)
+    out_path = crops_dir / f"{identifier}.png"
+
+    to_write = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    encoded = cv2.imencode(".png", to_write)[1]
+    encoded.tofile(str(out_path))
+
+    return out_path

@@ -192,3 +192,34 @@ def run_pipeline_with_localization(
     stages_list = list(_make_stages())
 
     return iter(stages_list), sheet_result_value
+
+
+def run_pipeline_with_detection(
+    image: np.ndarray, info_file_row_count: int
+) -> tuple[Iterator[StageArtifact], SheetResult, list]:
+    """Run the full pipeline through signature detection/classification (stage 7).
+
+    Args:
+        image: the raw photo (uint8 BGR from cv2.imread)
+        info_file_row_count: number of student records from the Info File
+
+    Returns:
+        (stage_iterator, sheet_result, cell_results)
+        - stage_iterator: Iterator yielding StageArtifact objects for stages 1-7
+        - sheet_result: SheetResult with table structure and warnings (Story 1.3)
+        - cell_results: list[detect.CellResult], one per detected row, in row
+          order (Story 1.4)
+    """
+     # Import detect here to avoid circular imports
+    from sams_core import detect
+
+    stages_iter, sheet_result = run_pipeline_with_localization(image, info_file_row_count)
+    stages_list = list(stages_iter)
+    deskewed_image = stages_list[4].image  # stage 5, "deskewed" (0-indexed)
+
+    cell_results, inspection_stage = detect.detect_signatures(
+        deskewed_image, sheet_result, expected_row_count=info_file_row_count
+    )
+    stages_list.append(inspection_stage)
+
+    return iter(stages_list), sheet_result, cell_results
