@@ -59,14 +59,15 @@ def hold_windows_until_dismissed() -> None:
     cv2.destroyAllWindows()
 
 
-def print_run_summary(info_file, sheet_id, sheet_result, cell_results, crop_paths) -> None:
-    """Per-student stdout summary after a successful run (UX-DR16)."""
-    print(f"Parsed {len(info_file.students)} Student Records. Sheet Identifier: {sheet_id}")
-    for warning in sheet_result.warnings:
+def print_run_summary(result) -> None:
+    """Per-student stdout summary after a successful run (UX-DR16).
+
+    `result` is the engine's SheetResult: Attendance Records carry the
+    canonical Student Index, name, and first-class status (Ambiguous included).
+    """
+    print(f"Parsed {len(result.records)} Student Records. Sheet Identifier: {result.sheet_id}")
+    for warning in result.warnings:
         print(f"Warning: {warning}")
-    for result in cell_results:
-        print(f"Row {result.row_index + 1}: {result.status.value} (ink coverage {result.ink_coverage * 100:.1f}%)")
-    if crop_paths:
-        print(f"Saved {len(crop_paths)} signature crops to {crop_paths[0].parent}")
-    else:
-        print("No signature crops saved - no student rows were detected on this sheet.")
+    for record in result.records:
+        print(f"{record.student_index}  {record.student_name}: {record.status.value}")
+    print(f"Saved {len(result.records)} Attendance Records to the Local DB.")

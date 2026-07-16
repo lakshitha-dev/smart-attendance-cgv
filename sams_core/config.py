@@ -73,7 +73,14 @@ LOCATE_GRID_MASK_DILATION_PX = 5  # dilate detected line pixels by this to build
 # (no vertical lines detected), fall back to a fixed fraction of the sheet's
 # width, since the Signature column is consistently the last ~1/5th to 1/4th
 # of a 5-column row on the sample sheets.
-DETECT_SIGNATURE_COLUMN_FALLBACK_FRACTION = 0.78  # left edge as a fraction of image width
+# Story 1.6 tuning (see TUNING_LOG.md): visual inspection of all five sample
+# sheets places the true Signature column's left edge at roughly 0.72-0.85 of
+# the width; 0.72 is the honest left edge of that observed range. NOTE: the
+# tuning log's diagnosis ("localization returns zero v_lines") described the
+# ORIGINAL Hough-based locate.py; since the 2026-07-13 morphological rework,
+# all five sample sheets localize a full 6-v-line grid and detection uses
+# cell_rois - this fallback now fires only when localization genuinely fails.
+DETECT_SIGNATURE_COLUMN_FALLBACK_FRACTION = 0.72  # left edge as a fraction of image width
 
 # Spillover margin (PRD FR-4): the Signature Cell ROI is dilated outward so ink
 # that overruns the printed grid line - including into the blank right margin
