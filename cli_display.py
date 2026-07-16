@@ -15,9 +15,10 @@ import os
 import sys
 
 import cv2
+from matplotlib.figure import Figure
 
 from sams_core import config
-from sams_core.models import StageArtifact
+from sams_core.models import AttendanceRecord, StageArtifact
 
 _gui_disabled = os.environ.get("SAMS_HEADLESS") == "1"
 
@@ -75,3 +76,45 @@ def print_run_summary(result) -> None:
     saved = result.persisted_count if result.persisted_count is not None else len(result.records)
     print(f"Saved {saved} Attendance Records to the Local DB.")
     print(f"Signature crops: {config.OUTPUT_DIR / str(result.sheet_id) / 'crops'}")
+
+
+def print_attendance_records(records: list[AttendanceRecord]) -> None:
+    """Render one student's Attendance Records for `infovis.py` (Story 2.1, AD-7).
+
+    `records` is the engine's `query_attendance` result: one row per Signing
+    Sheet the student appears on, already resolved to the canonical index.
+    """
+    name = records[0].student_name
+    index = records[0].student_index
+    print(f"Attendance for {name} ({index}):")
+    for record in records:
+        print(f"{record.sheet_id}  {record.subject_code}: {record.status.value}")
+
+
+def show_figure(fig: Figure) -> None:
+    """Display a Matplotlib Figure via `plt.show` (Story 2.2, AD-7: rendering
+    stays in the adapter; the engine's `visualization.py` never shows it).
+
+    Gated on SAMS_HEADLESS like the OpenCV stage windows so the test suite
+    never blocks on or pops a window.
+    """
+    if os.environ.get("SAMS_HEADLESS") == "1":
+        return
+    import matplotlib.pyplot as plt
+
+    plt.show()
+
+
+def print_no_data(alias: str, students: list[dict]) -> None:
+    """No-data message + valid indices (AD-6): friendly output, never an error tone.
+
+    `students` is `repository.list_students()`'s result — each entry listed as
+    short form + 8-digit (`001 (10000409)`) so the operator can retry.
+    """
+    print(f"No data found for index '{alias}'.")
+    if not students:
+        print("No students in the Local DB yet.")
+        return
+    print("Valid indices:")
+    for student in students:
+        print(f"  {student['no']} ({student['student_index']})")
