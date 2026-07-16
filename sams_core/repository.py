@@ -173,6 +173,20 @@ class AttendanceRepository:
         }
         return matches.pop() if len(matches) == 1 else None
 
+    def query_attendance(self, alias: str) -> list[AttendanceRecord]:
+        """The ONE engine query API for CLI/Web Lookup (AD-4, Story 2.1).
+
+        Resolves `alias` through the single resolver, then reads matching
+        Attendance Records — a single call so adapters (`infovis.py`, the
+        Web Lookup page) never parse index forms or make two engine calls.
+        An unresolvable alias yields an empty list, a no-data result rather
+        than an exception (AD-6).
+        """
+        index = self.resolve_student_index(alias)
+        if index is None:
+            return []
+        return self.get_attendance(student_index=index)
+
     # --- Attendance -----------------------------------------------------------
 
     @staticmethod

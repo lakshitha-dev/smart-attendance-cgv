@@ -75,6 +75,28 @@ def test_resolve_student_index_unknown_8_digit_passes_through_unchanged(repo):
     assert repo.resolve_student_index("99999999") == "99999999"
 
 
+# --- Single engine query API (Story 2.1) -------------------------------------
+
+
+def test_query_attendance_returns_identical_records_for_either_index_form(repo):
+    students = _students(3)  # no="001".."003", index="10009300".."10009302"
+    repo.upsert_students(students)
+    repo.save_attendance([_record(s.index) for s in students])
+
+    by_short_form = repo.query_attendance("002")
+    by_eight_digit = repo.query_attendance("10009301")
+
+    assert by_short_form == by_eight_digit
+    assert len(by_short_form) == 1
+    assert by_short_form[0].student_index == "10009301"
+
+
+def test_query_attendance_unresolvable_alias_returns_empty_list_not_raises(repo):
+    repo.upsert_students(_students(1))
+    assert repo.query_attendance("999") == []
+    assert repo.query_attendance("not-a-number") == []
+
+
 # --- Attendance upsert / re-processing --------------------------------------
 
 
