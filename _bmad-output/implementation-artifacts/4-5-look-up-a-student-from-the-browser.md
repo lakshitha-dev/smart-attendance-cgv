@@ -1,5 +1,5 @@
 ---
-status: review
+status: done
 epic: 4
 story: '4.5'
 title: Look up a student from the browser
@@ -100,3 +100,21 @@ Story 4.1 (page scaffold) is still `ready-for-dev` — no `webui/` app, no `requ
 ## Change Log
 
 - 2026-07-16: Implemented Story 4.5 — minimal `webui/` scaffold (`app.py`, `pages/Lookup.py`, `lookup_logic.py`), reusing Story 2.1's `query_attendance` resolver and Story 2.2's `render_attendance_timeline` for FR-14 data-layer parity with the CLI. Verified both index forms and the unknown-index no-data path via unit tests and a live manual run against the real seeded DB. Story 4.1 (full page shell/theme) intentionally left out of scope per explicit user direction — see Scope Note.
+
+### Review Findings (code review 2026-07-16, Sprint-6 merge)
+
+- [x] [Review][Patch] Matplotlib backend never forced server-side: GUI backend auto-selected inside Streamlit's worker thread (TkAgg raises "main thread is not in main loop"; hard failure on headless deploys) — force Agg before importing the renderer [webui/pages/Lookup.py:18]
+- [x] [Review][Patch] Every lookup leaks a Figure into pyplot's registry (st.pyplot does not close explicit figures) — close after rendering [webui/pages/Lookup.py:39]
+- [x] [Review][Patch] Corrupt/non-DB sams.db raises sqlite3.DatabaseError which is neither wrapped by the engine (only OperationalError is) nor caught by the page (only SamsError) — raw traceback in the browser — broaden the engine catch to sqlite3.Error and add a page-level fallback handler [sams_core/repository.py:58, webui/pages/Lookup.py:31]
+- [x] [Review][Patch] Unknown/ambiguous/empty-DB/zero-attendance all collapse to one misleading message ("We don't have any attendance saved for that number" — false for ambiguous ordinals; empty-DB case never says there are no students despite the subtask being checked off) — branch on the new LookupResult outcomes [webui/lookup_logic.py:40]
+- [x] [Review][Patch] Whitespace-only input bypasses the empty-state prompt — strip before the guard [webui/pages/Lookup.py:25]
+- [x] [Review][Patch] "Students we do know" listing is unbounded (200 students = one multi-thousand-char paragraph on a phone) and hardcodes a truncation ellipsis that falsely implies more — cap with honest truncation, fall back for NULL `no` [webui/lookup_logic.py:44]
+- [x] [Review][Patch] The Streamlit page itself has zero test coverage — not even import — the DoD's copy claims rest on one manual run; add streamlit.testing.v1.AppTest tests for empty state, unknown index, and successful render [tests/test_webui_lookup.py]
+- [x] [Review][Patch] Spinner covers the cheap DB query but not the slow matplotlib render (cold import 1-2s of dead air) — move the render inside the spinner [webui/pages/Lookup.py:28]
+- [x] [Review][Patch] No st.set_page_config — the tab/sidebar say "app" — set a proper title on both pages [webui/app.py:14]
+- [x] [Review][Patch] conftest honors only SAMS_HEADLESS=="1" — "true"/"yes" silently keep the GUI backend — accept truthy values [tests/conftest.py:8]
+- [x] [Review][Dismissed] CLI/Web parity test tautological — parity is architectural (same engine function); a cross-process PNG compare adds little
+- [x] [Review][Dismissed] sys.path bootstrap duplication — Streamlit runs pages as scripts; the real cure is an editable install (defer to packaging story 1-7 / shell story 4-1)
+- [x] [Review][Dismissed] .claude/launch.json "unreviewed" — it IS committed in 2189aa9; it was merely outside this review's diff scope
+- [x] [Review][Dismissed] Operator-resolved marker on the web chart — no spec clause requires it (verified against 4.5 ACs, UX-DR10, EXPERIENCE.md)
+- [x] [Review][Defer] Sequencing: 4.5 shipped webui/app.py + requirements-web.txt that the sprint plan assigns to Sprint 8 / Story 4.1, and its stub landing page must be REPLACED (not extended) by 4.1's Process-landing three-page contract — flag to 4.1's owner; also 4.5 was built on 2.1/2.2 while both were still in review (resolved by this same review cycle)

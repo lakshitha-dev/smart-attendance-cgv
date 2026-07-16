@@ -1,5 +1,5 @@
 ---
-status: review
+status: done
 epic: 2
 story: '2.1'
 title: Query a student's attendance by either index form
@@ -91,3 +91,17 @@ Both index forms return identical records (unit test); unknown-index message lis
 ## Change Log
 
 - 2026-07-16: Implemented Story 2.1 — single engine query API (`repository.query_attendance`), CLI display helpers (`print_attendance_records`, `print_no_data`), thin `infovis.py` entry script, and unit/CLI tests covering both index forms and the unknown-index no-data path. Full regression suite passes (120/120).
+
+### Review Findings (code review 2026-07-16, Sprint-6 merge)
+
+- [x] [Review][Patch] `infovis.py` has zero exception handling — DB-locked `ProcessingError`, hand-edited-status `ValueError`, and Ctrl+C all escape as raw tracebacks, violating AD-6/NFR-10 and the exit-code contract `sams.py` implements — mirror sams.py's translation (2 input / 1 other / 130 interrupt) [infovis.py:13]
+- [x] [Review][Patch] The empty-result path conflates four distinct states (unknown alias, ambiguous ordinal, known student with zero attendance, empty/missing DB) — the operator is told a valid input is invalid, and the valid-indices list can show the "invalid" ordinal twice — return a typed LookupResult with an outcome discriminator from `query_attendance` (AD-6 locates the no-data payload engine-side) and branch the copy per outcome in both adapters [sams_core/repository.py:176, cli_display.py:114, infovis.py:21]
+- [x] [Review][Patch] `query_attendance` opens 2-3 connections (resolver + read + adapter's list_students) with a TOCTOU between them despite advertising "a single call" — do resolve+read+roster in ONE connection inside the new LookupResult implementation [sams_core/repository.py:176]
+- [x] [Review][Patch] A read-only lookup silently CREATES sams.db + parent dirs when missing (typo'd cwd leaves stray DBs; missing-DB indistinguishable from empty) — detect the missing file on the query path and return the empty-DB outcome without connecting [sams_core/repository.py:51]
+- [x] [Review][Patch] `resolved_by_operator` is invisible in CLI output — an operator-corrected status is indistinguishable from a machine verdict — print a marker [cli_display.py:90]
+- [x] [Review][Patch] Nullable fields print literally: "None: Present" for NULL subject_code, "None (10000409)" in the valid-indices list for NULL `no`, dangling double space for missing roster name — add fallbacks [cli_display.py:87,120]
+- [x] [Review][Patch] Zero-padded 8-digit ordinal discontinuity: "00000002" short-circuits as canonical and misses (while 7 and 9 digits resolve) — prefer known-index match, then ordinal, then 8-digit passthrough [sams_core/repository.py:163]
+- [x] [Review][Patch] Windows cp1252 stdout can crash on names with diacritics — reconfigure stdout errors="replace" at the CLI entry [infovis.py:31]
+- [x] [Review][Patch] Tests never cover: ambiguous ordinal end-to-end, whitespace input, known-student-zero-attendance, ProcessingError path, or any subprocess-level exit-code pinning — add them [tests/test_infovis.py, tests/test_repository.py]
+- [x] [Review][Dismissed] argparse SystemExit from `main() -> int` — consistent with sams.py; exit codes are pinned at the subprocess boundary instead
+- [x] [Review][Note] Dev Agent Record inaccuracies: claims "single engine call" (there are two: query + render) and omits shipped files; 2.1 and 2.2 were committed fused in 2189aa9, so neither increment is auditable standalone

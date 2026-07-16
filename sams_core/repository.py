@@ -26,7 +26,12 @@ from pathlib import Path
 
 from sams_core import config
 from sams_core.errors import ProcessingError
-from sams_core.models import AttendanceRecord, AttendanceStatus
+from sams_core.models import (
+    AttendanceLookup,
+    AttendanceRecord,
+    AttendanceStatus,
+    LookupOutcome,
+)
 
 
 class AttendanceRepository:
@@ -55,7 +60,10 @@ class AttendanceRepository:
             self._ensure_schema(conn)
             yield conn
             conn.commit()
-        except sqlite3.OperationalError as exc:
+        except sqlite3.Error as exc:
+            # OperationalError (locked/busy) AND DatabaseError (corrupt file,
+            # "file is not a database") — nothing sqlite-flavored may escape
+            # the engine boundary raw (AD-6).
             conn.rollback()
             raise ProcessingError(f"Local DB unavailable: {exc}") from exc
         except BaseException:  # incl. KeyboardInterrupt: never leave a half-open tx
@@ -159,33 +167,104 @@ class AttendanceRepository:
         """
         if alias is None:
             return None
-        candidate = alias.strip()
-        if candidate.isascii() and candidate.isdigit() and len(candidate) == 8:
-            return candidate
-        if not (candidate.isascii() and candidate.isdigit()):
-            return None
         with self._connect() as conn:
             rows = conn.execute("SELECT student_index, no FROM students").fetchall()
-        matches = {
-            row["student_index"]
-            for row in rows
-            if str(row["no"] or "").strip().isdigit() and int(row["no"]) == int(candidate)
-        }
-        return matches.pop() if len(matches) == 1 else None
+        index, _ = self._resolve_alias(alias, [dict(r) for r in rows])
+        return index
 
-    def query_attendance(self, alias: str) -> list[AttendanceRecord]:
+    @staticmethod
+    def _resolve_alias(alias: str, students: list[dict]) -> tuple[str | None, tuple[str, ...]]:
+        """Shared alias resolution against a roster snapshot.
+
+        Returns (canonical_index_or_None, ambiguous_candidates). Precedence:
+        a KNOWN 8-digit index wins outright; then the ordinal match (so a
+        zero-padded ordinal like '00000002' still finds student no=2 instead
+        of dead-ending); an UNKNOWN 8-digit form passes through unchanged
+        (AD-6: unknown index is a no-data result downstream, not an error);
+        an ordinal matching >1 students is ambiguous — never an arbitrary pick.
+        """
+        candidate = alias.strip()
+        if not (candidate.isascii() and candidate.isdigit()):
+            return None, ()
+        known = {s["student_index"] for s in students}
+        if len(candidate) == 8 and candidate in known:
+            return candidate, ()
+        matches = sorted(
+            {
+                s["student_index"]
+                for s in students
+                if str(s["no"] or "").strip().isdigit() and int(s["no"]) == int(candidate)
+            }
+        )
+        if len(matches) == 1:
+            return matches[0], ()
+        if len(matches) > 1:
+            return None, tuple(matches)
+        if len(candidate) == 8:
+            return candidate, ()  # unknown canonical form passes through
+        return None, ()
+
+    def query_attendance(self, alias: str) -> AttendanceLookup:
         """The ONE engine query API for CLI/Web Lookup (AD-4, Story 2.1).
 
-        Resolves `alias` through the single resolver, then reads matching
-        Attendance Records — a single call so adapters (`infovis.py`, the
-        Web Lookup page) never parse index forms or make two engine calls.
-        An unresolvable alias yields an empty list, a no-data result rather
-        than an exception (AD-6).
+        Resolves `alias` and reads matching Attendance Records in a SINGLE
+        connection (one consistent snapshot — no resolve/read TOCTOU), so
+        adapters never parse index forms or make two engine calls. Every
+        no-data shape is a typed outcome, never an exception (AD-6):
+
+        - EMPTY_DB: no students ingested (including no DB file — a read-only
+          lookup must not create one on disk).
+        - AMBIGUOUS: a short ordinal matching >1 students, candidates listed.
+        - UNKNOWN: alias resolves to nobody; valid_students carries the
+          retry listing so adapters need no second call.
+        - NO_ATTENDANCE: the student is on a roster but has no rows yet.
         """
-        index = self.resolve_student_index(alias)
-        if index is None:
-            return []
-        return self.get_attendance(student_index=index)
+        if not self._db_path.exists():
+            return AttendanceLookup(alias=alias, outcome=LookupOutcome.EMPTY_DB)
+        with self._connect() as conn:
+            students = [
+                dict(row)
+                for row in conn.execute(
+                    "SELECT student_index, no, title, name FROM students "
+                    "ORDER BY student_index"
+                ).fetchall()
+            ]
+            roster = tuple(students)
+            if not students:
+                return AttendanceLookup(alias=alias, outcome=LookupOutcome.EMPTY_DB)
+            index, candidates = self._resolve_alias(alias, students)
+            if candidates:
+                return AttendanceLookup(
+                    alias=alias,
+                    outcome=LookupOutcome.AMBIGUOUS,
+                    candidates=candidates,
+                    valid_students=roster,
+                )
+            if index is None:
+                return AttendanceLookup(
+                    alias=alias, outcome=LookupOutcome.UNKNOWN, valid_students=roster
+                )
+            rows = conn.execute(
+                "SELECT a.student_index, a.sheet_id, a.status, a.subject_code, "
+                "a.subject_name, a.session_time, a.lecturer, a.resolved_by_operator, "
+                "s.name AS student_name "
+                "FROM attendance a LEFT JOIN students s "
+                "ON a.student_index = s.student_index "
+                "WHERE a.student_index = ? ORDER BY a.sheet_id",
+                (index,),
+            ).fetchall()
+            if not rows:
+                outcome = (
+                    LookupOutcome.NO_ATTENDANCE
+                    if any(s["student_index"] == index for s in students)
+                    else LookupOutcome.UNKNOWN
+                )
+                return AttendanceLookup(alias=alias, outcome=outcome, valid_students=roster)
+            return AttendanceLookup(
+                alias=alias,
+                outcome=LookupOutcome.FOUND,
+                records=tuple(self._record_from_row(row) for row in rows),
+            )
 
     # --- Attendance -----------------------------------------------------------
 
@@ -404,20 +483,21 @@ class AttendanceRepository:
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
 
-        return [
-            AttendanceRecord(
-                student_index=row["student_index"],
-                student_name=row["student_name"] or "",
-                sheet_id=row["sheet_id"],
-                status=AttendanceStatus(row["status"]),
-                subject_code=row["subject_code"],
-                subject_name=row["subject_name"],
-                session_time=row["session_time"],
-                lecturer=row["lecturer"],
-                resolved_by_operator=bool(row["resolved_by_operator"]),
-            )
-            for row in rows
-        ]
+        return [self._record_from_row(row) for row in rows]
+
+    @staticmethod
+    def _record_from_row(row: sqlite3.Row) -> AttendanceRecord:
+        return AttendanceRecord(
+            student_index=row["student_index"],
+            student_name=row["student_name"] or "",
+            sheet_id=row["sheet_id"],
+            status=AttendanceStatus(row["status"]),
+            subject_code=row["subject_code"],
+            subject_name=row["subject_name"],
+            session_time=row["session_time"],
+            lecturer=row["lecturer"],
+            resolved_by_operator=bool(row["resolved_by_operator"]),
+        )
 
     # --- Signature image paths (no blobs; AD-4/AD-10) -------------------------
 

@@ -11,5 +11,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
+st.set_page_config(page_title="SAMS")
+
 st.title("SAMS")
 st.write("Use the sidebar to open a page.")

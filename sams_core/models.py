@@ -98,3 +98,32 @@ class SheetResult:
     records: tuple["AttendanceRecord", ...] = ()  # one per Student Record (FR-5)
     persisted_count: int | None = None  # attendance rows actually written this run
     preserved_count: int | None = None  # rows kept because of operator resolutions
+
+
+class LookupOutcome(Enum):
+    """Why a lookup returned what it did (Story 2.1 review fix): the four
+    no-data shapes are DISTINCT operator situations and must never collapse
+    into one message (AD-6 locates the no-data payload engine-side)."""
+
+    FOUND = "found"
+    NO_ATTENDANCE = "no-attendance"  # student on a roster, zero attendance rows
+    UNKNOWN = "unknown"  # alias resolves to no known student
+    AMBIGUOUS = "ambiguous"  # short ordinal matches more than one student
+    EMPTY_DB = "empty-db"  # no students ingested yet (or no DB file at all)
+
+
+@dataclass(frozen=True)
+class AttendanceLookup:
+    """Typed result of `repository.query_attendance` (AD-2/AD-6).
+
+    `records` is populated only for FOUND. `candidates` carries the canonical
+    indices an AMBIGUOUS ordinal matched. `valid_students` carries the roster
+    listing (list_students shape) for the no-data outcomes so adapters never
+    make a second engine call to present the retry hint.
+    """
+
+    alias: str
+    outcome: LookupOutcome
+    records: tuple[AttendanceRecord, ...] = ()
+    candidates: tuple[str, ...] = ()
+    valid_students: tuple[dict, ...] = ()

@@ -4,21 +4,36 @@ re-processing.
 
 `render_attendance_timeline` returns a Matplotlib `Figure` and never calls
 `plt.show()`: the CLI adapter (`infovis.py`, via `cli_display.show_figure`)
-displays it, and the Web UI later renders the identical `Figure` object via
+displays it, and the Web UI renders the identical `Figure` object via
 `st.pyplot` (FR-14 data-layer parity) — styling lives here exactly once.
+
+Backend note: when SAMS_HEADLESS is set (any value but 0/false/no), the Agg
+backend is forced BEFORE pyplot ever loads, so headless machines and worker
+threads never initialize a GUI toolkit. Callers own the figure lifecycle and
+must `plt.close(fig)` when done — long-lived processes (Streamlit) leak
+otherwise.
 """
 
+import os
 from collections.abc import Sequence
+from datetime import date
+
+import matplotlib
+
+if os.environ.get("SAMS_HEADLESS", "0").lower() not in ("0", "", "false", "no"):
+    matplotlib.use("Agg", force=True)
 
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
+from sams_core.errors import InputError
 from sams_core.models import AttendanceRecord, AttendanceStatus
 
 # Status -> (y-position, colour, icon, legend label). Ambiguous sits on its
 # own mid-band (y=0) strictly between Absent (-1) and Present (1). Colours
 # and icons per UX-DR8: icon + text + colour together, colour never the sole
-# carrier (greyscale-survivable).
+# carrier (greyscale-survivable). The y-axis ticks are DERIVED from this
+# table (single source of truth — never a parallel hardcoded copy).
 _STATUS_STYLE = {
     AttendanceStatus.ABSENT: {"y": -1, "color": "#A63D2A", "icon": "✕", "label": "Absent"},
     AttendanceStatus.AMBIGUOUS: {"y": 0, "color": "#7A6212", "icon": "?", "label": "Ambiguous"},
@@ -30,13 +45,15 @@ _LEGEND_ORDER = (AttendanceStatus.PRESENT, AttendanceStatus.ABSENT, AttendanceSt
 
 def _attendance_rate_caption(records: Sequence[AttendanceRecord]) -> str:
     """Present / (Present + Absent); Ambiguous is pending and excluded from
-    both sides of the ratio (Dev Notes), reported separately instead."""
+    both sides of the ratio (Dev Notes), reported separately instead. With
+    zero marked sessions the rate is n/a — an all-Ambiguous student must
+    never be branded 0%."""
     present = sum(1 for r in records if r.status == AttendanceStatus.PRESENT)
     absent = sum(1 for r in records if r.status == AttendanceStatus.ABSENT)
     ambiguous = sum(1 for r in records if r.status == AttendanceStatus.AMBIGUOUS)
     counted = present + absent
-    rate = (present / counted * 100) if counted else 0.0
-    caption = f"Attendance rate: {rate:.0f}% ({present}/{counted} sessions marked"
+    rate = f"{present / counted * 100:.0f}%" if counted else "n/a"
+    caption = f"Attendance rate: {rate} ({present}/{counted} sessions marked"
     if ambiguous:
         caption += f", {ambiguous} pending)"
     else:
@@ -44,22 +61,47 @@ def _attendance_rate_caption(records: Sequence[AttendanceRecord]) -> str:
     return caption
 
 
+def _chronology_key(record: AttendanceRecord) -> tuple:
+    """ISO-dated Sheet Identifiers sort chronologically; AD-11's
+    filename-derived identifiers can't be dated, so they sort
+    lexicographically AFTER all dated sheets rather than interleaving
+    wrongly among them."""
+    try:
+        return (0, date.fromisoformat(record.sheet_id).toordinal(), record.sheet_id)
+    except (TypeError, ValueError):
+        return (1, 0, record.sheet_id)
+
+
 def render_attendance_timeline(records: Sequence[AttendanceRecord]) -> Figure:
     """Render one student's per-Session attendance timeline (FR-8).
 
     `records` is one student's Attendance Records (Story 2.1's
-    `query_attendance` result); order is not assumed — sorted here by Sheet
-    Identifier so the timeline reads chronologically left to right.
+    `query_attendance` result) and must be non-empty; order is not assumed —
+    sorted here so the timeline reads chronologically left to right.
     """
+    if not records:
+        raise InputError("no Attendance Records to render — nothing to draw")
+
     import matplotlib.pyplot as plt
 
-    ordered = sorted(records, key=lambda r: r.sheet_id)
+    ordered = sorted(records, key=_chronology_key)
     x_positions = range(len(ordered))
     y_positions = [_STATUS_STYLE[r.status]["y"] for r in ordered]
     colors = [_STATUS_STYLE[r.status]["color"] for r in ordered]
 
-    fig, ax = plt.subplots(figsize=(8, 4.5))
-    ax.plot(x_positions, y_positions, color="#B9B4A6", linewidth=1, zorder=1)
+    # Width scales with session count so a semester of sheets stays legible.
+    width = min(24.0, max(8.0, 0.55 * len(ordered)))
+    fig, ax = plt.subplots(figsize=(width, 4.5))
+    # steps-mid: statuses are categorical — a diagonal line would render
+    # Ambiguous as a quantity "halfway between" Absent and Present.
+    ax.plot(
+        x_positions,
+        y_positions,
+        color="#B9B4A6",
+        linewidth=1,
+        zorder=1,
+        drawstyle="steps-mid",
+    )
     ax.scatter(x_positions, y_positions, c=colors, s=140, zorder=3)
     for xi, record in zip(x_positions, ordered):
         style = _STATUS_STYLE[record.status]
@@ -76,9 +118,13 @@ def render_attendance_timeline(records: Sequence[AttendanceRecord]) -> Figure:
 
     ax.set_xticks(list(x_positions))
     ax.set_xticklabels([r.sheet_id for r in ordered], rotation=45, ha="right")
-    ax.set_yticks([-1, 0, 1])
-    ax.set_yticklabels(["Absent", "Ambiguous", "Present"])
-    ax.set_ylim(-1.6, 1.6)
+    # y ticks derived from _STATUS_STYLE — the one mapping (bottom-up order).
+    bands = sorted(_STATUS_STYLE.values(), key=lambda s: s["y"])
+    ax.set_yticks([band["y"] for band in bands])
+    ax.set_yticklabels([band["label"] for band in bands])
+    # Extra headroom above the Present band: the legend lives there, outside
+    # the data's reach, so it can never occlude the most recent markers.
+    ax.set_ylim(-1.9, 2.3)
     ax.set_xlabel("Session (Sheet Identifier)")
     ax.set_ylabel("Status")
 
@@ -98,17 +144,17 @@ def render_attendance_timeline(records: Sequence[AttendanceRecord]) -> Figure:
         )
         for status in _LEGEND_ORDER
     ]
-    ax.legend(handles=handles, loc="upper right", frameon=False)
+    ax.legend(handles=handles, loc="upper center", ncol=3, frameon=False)
 
-    ax.text(
+    # Figure-level caption in layout-reserved space (an axes-transform text
+    # below the axes is invisible to tight_layout and clips under long ticks).
+    fig.text(
         0.5,
-        -0.5,
+        0.02,
         _attendance_rate_caption(ordered),
-        transform=ax.transAxes,
         ha="center",
         fontsize=10,
         color="#33383F",
     )
-
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
     return fig

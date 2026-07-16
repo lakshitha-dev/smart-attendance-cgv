@@ -13,12 +13,15 @@ attempts for the run. Set SAMS_HEADLESS=1 to suppress windows explicitly
 
 import os
 import sys
+from typing import TYPE_CHECKING
 
 import cv2
-from matplotlib.figure import Figure
 
 from sams_core import config
-from sams_core.models import AttendanceRecord, StageArtifact
+from sams_core.models import AttendanceLookup, AttendanceRecord, LookupOutcome, StageArtifact
+
+if TYPE_CHECKING:  # matplotlib stays a deferred import: sams.py must not pay
+    from matplotlib.figure import Figure  # its import cost for a type name.
 
 _gui_disabled = os.environ.get("SAMS_HEADLESS") == "1"
 
@@ -83,38 +86,72 @@ def print_attendance_records(records: list[AttendanceRecord]) -> None:
 
     `records` is the engine's `query_attendance` result: one row per Signing
     Sheet the student appears on, already resolved to the canonical index.
+    Operator-resolved rows are marked — an audited hand decision must be
+    distinguishable from a machine verdict. Nullable metadata never prints
+    as a literal "None".
     """
-    name = records[0].student_name
-    index = records[0].student_index
-    print(f"Attendance for {name} ({index}):")
+    if not records:
+        return
+    name = records[0].student_name or records[0].student_index
+    print(f"Attendance for {name} ({records[0].student_index}):")
     for record in records:
-        print(f"{record.sheet_id}  {record.subject_code}: {record.status.value}")
+        subject = f"  {record.subject_code}" if record.subject_code else ""
+        marker = "  [operator-resolved]" if record.resolved_by_operator else ""
+        print(f"{record.sheet_id}{subject}: {record.status.value}{marker}")
 
 
-def show_figure(fig: Figure) -> None:
+def show_figure(fig: "Figure") -> None:
     """Display a Matplotlib Figure via `plt.show` (Story 2.2, AD-7: rendering
     stays in the adapter; the engine's `visualization.py` never shows it).
 
-    Gated on SAMS_HEADLESS like the OpenCV stage windows so the test suite
-    never blocks on or pops a window.
+    Shares the OpenCV helpers' gating (SAMS_HEADLESS + the runtime
+    `_gui_disabled` flag), degrades gracefully when no GUI backend exists,
+    and ALWAYS closes the figure afterwards — pyplot's global registry must
+    not accumulate figures across calls.
     """
-    if os.environ.get("SAMS_HEADLESS") == "1":
-        return
+    global _gui_disabled
     import matplotlib.pyplot as plt
 
-    plt.show()
+    try:
+        if _gui_disabled or os.environ.get("SAMS_HEADLESS") == "1":
+            return
+        try:
+            plt.figure(fig.number)  # make the PASSED figure the active one
+            plt.show()
+        except Exception:
+            _gui_disabled = True  # no GUI backend: keep going, skip display
+    finally:
+        plt.close(fig)
 
 
-def print_no_data(alias: str, students: list[dict]) -> None:
-    """No-data message + valid indices (AD-6): friendly output, never an error tone.
+def _student_listing(students: list[dict], limit: int = 12) -> str:
+    """Short-form + 8-digit listing (`001 (10000409)`), honestly truncated."""
+    shown = ", ".join(
+        f"{(s['no'] or s['student_index'])} ({s['student_index']})" for s in students[:limit]
+    )
+    extra = len(students) - limit
+    return shown + (f", … and {extra} more" if extra > 0 else "")
 
-    `students` is `repository.list_students()`'s result — each entry listed as
-    short form + 8-digit (`001 (10000409)`) so the operator can retry.
+
+def print_lookup_outcome(lookup: AttendanceLookup) -> None:
+    """Present a no-data lookup outcome (AD-6): each shape gets ITS OWN copy —
+    unknown, ambiguous, known-but-empty, and empty-DB are different operator
+    situations, and a friendly tone must never misdiagnose one as another.
     """
-    print(f"No data found for index '{alias}'.")
-    if not students:
-        print("No students in the Local DB yet.")
-        return
-    print("Valid indices:")
-    for student in students:
-        print(f"  {student['no']} ({student['student_index']})")
+    if lookup.outcome is LookupOutcome.EMPTY_DB:
+        print("No students in the Local DB yet. Process a signing sheet first (sams.py).")
+    elif lookup.outcome is LookupOutcome.AMBIGUOUS:
+        print(
+            f"'{lookup.alias}' matches more than one student: "
+            f"{', '.join(lookup.candidates)}."
+        )
+        print("Use the 8-digit Student Index to pick one.")
+    elif lookup.outcome is LookupOutcome.NO_ATTENDANCE:
+        print(
+            f"'{lookup.alias}' is on the roster but has no attendance saved yet — "
+            "process their signing sheet first."
+        )
+    else:  # UNKNOWN
+        print(f"No data found for index '{lookup.alias}'.")
+        if lookup.valid_students:
+            print(f"Valid indices: {_student_listing(list(lookup.valid_students))}")

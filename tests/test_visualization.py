@@ -101,12 +101,77 @@ def test_render_attendance_timeline_has_title_and_axis_labels():
     assert "Alice" in ax.get_title() or "10000409" in ax.get_title()
 
 
+def _all_figure_text(fig):
+    ax = fig.axes[0]
+    return (
+        " ".join(t.get_text() for t in ax.texts)
+        + " ".join(t.get_text() for t in fig.texts)
+        + ax.get_title()
+    )
+
+
 def test_render_attendance_timeline_annotates_attendance_rate_excluding_ambiguous():
     # 2 Present, 1 Absent, 1 Ambiguous -> rate over the 3 counted sessions.
     fig = render_attendance_timeline(_multi_session_records())
-    ax = fig.axes[0]
 
-    all_text = " ".join(t.get_text() for t in ax.texts) + ax.get_title()
+    all_text = _all_figure_text(fig)
     assert "%" in all_text
     assert "67" in all_text  # 2/3 = 66.7%, rounds to 67
     assert "pending" in all_text.lower() or "1" in all_text
+
+
+def test_render_attendance_timeline_empty_records_raise_typed_error():
+    """The renderer is a public engine API: an empty query result must fail
+    with the engine's own error type, never a raw IndexError."""
+    import pytest
+
+    from sams_core.errors import InputError
+
+    with pytest.raises(InputError):
+        render_attendance_timeline([])
+
+
+def test_render_attendance_timeline_all_ambiguous_rate_is_na_not_zero():
+    """An all-Ambiguous student must never be branded '0% attendance'."""
+    fig = render_attendance_timeline(
+        [
+            _record("2019-05-31", AttendanceStatus.AMBIGUOUS),
+            _record("2019-06-07", AttendanceStatus.AMBIGUOUS),
+        ]
+    )
+    all_text = _all_figure_text(fig)
+    assert "n/a" in all_text
+    assert "0%" not in all_text
+
+
+def test_render_attendance_timeline_legend_sits_above_the_data_band():
+    """The legend must never occlude markers: it lives in the headroom above
+    y=1 (Present), so the most recent marks stay visible."""
+    fig = render_attendance_timeline(_multi_session_records())
+    ax = fig.axes[0]
+    assert ax.get_ylim()[1] > 1.5  # reserved headroom exists
+    legend_y0 = ax.get_legend().get_window_extent(fig.canvas.get_renderer()).y0
+    present_marker_y = ax.transData.transform((0, 1))[1]
+    assert legend_y0 > present_marker_y
+
+
+def test_render_attendance_timeline_yticks_derive_from_status_mapping():
+    from sams_core.visualization import _STATUS_STYLE
+
+    fig = render_attendance_timeline(_multi_session_records())
+    ax = fig.axes[0]
+    tick_to_label = dict(zip(ax.get_yticks(), [t.get_text() for t in ax.get_yticklabels()]))
+    for style in _STATUS_STYLE.values():
+        assert tick_to_label[style["y"]] == style["label"]
+
+
+def test_render_attendance_timeline_non_iso_sheet_ids_sort_after_dated_ones():
+    records = [
+        _record("IMG_5031", AttendanceStatus.PRESENT),
+        _record("2019-06-07", AttendanceStatus.ABSENT),
+        _record("2019-05-31", AttendanceStatus.PRESENT),
+    ]
+    fig = render_attendance_timeline(records)
+    ax = fig.axes[0]
+    labels = [t.get_text() for t in ax.get_xticklabels()]
+    assert labels == ["2019-05-31", "2019-06-07", "IMG_5031"]

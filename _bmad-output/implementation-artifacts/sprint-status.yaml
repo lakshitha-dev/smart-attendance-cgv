@@ -60,8 +60,8 @@ development_status:
   1-7-run-everything-on-a-fresh-machine: ready-for-dev
   epic-1-retrospective: optional
   epic-2: in-progress
-  2-1-query-attendance-by-either-index-form: review
-  2-2-render-attendance-timeline-graph: review
+  2-1-query-attendance-by-either-index-form: done
+  2-2-render-attendance-timeline-graph: done
   epic-2-retrospective: optional
   epic-3: in-progress
   3-1-maintain-reference-signatures: ready-for-dev
@@ -73,7 +73,7 @@ development_status:
   4-2-upload-and-process-with-one-tap: ready-for-dev
   4-3-watch-pipeline-and-read-results: ready-for-dev
   4-4-resolve-ambiguous-row-with-one-tap: ready-for-dev
-  4-5-look-up-a-student-from-the-browser: review
+  4-5-look-up-a-student-from-the-browser: done
   4-6-check-a-signature-from-the-browser: ready-for-dev
   4-7-responsive-accessible-on-all-surfaces: ready-for-dev
   epic-4-retrospective: optional

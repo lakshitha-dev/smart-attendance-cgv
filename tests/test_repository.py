@@ -1,6 +1,11 @@
 import pytest
 
-from sams_core.models import AttendanceRecord, AttendanceStatus, StudentRecord
+from sams_core.models import (
+    AttendanceRecord,
+    AttendanceStatus,
+    LookupOutcome,
+    StudentRecord,
+)
 from sams_core.repository import AttendanceRepository
 
 
@@ -86,15 +91,63 @@ def test_query_attendance_returns_identical_records_for_either_index_form(repo):
     by_short_form = repo.query_attendance("002")
     by_eight_digit = repo.query_attendance("10009301")
 
-    assert by_short_form == by_eight_digit
-    assert len(by_short_form) == 1
-    assert by_short_form[0].student_index == "10009301"
+    assert by_short_form.outcome is LookupOutcome.FOUND
+    assert by_short_form.records == by_eight_digit.records
+    assert len(by_short_form.records) == 1
+    assert by_short_form.records[0].student_index == "10009301"
 
 
-def test_query_attendance_unresolvable_alias_returns_empty_list_not_raises(repo):
+def test_query_attendance_unresolvable_alias_is_unknown_outcome_not_raises(repo):
     repo.upsert_students(_students(1))
-    assert repo.query_attendance("999") == []
-    assert repo.query_attendance("not-a-number") == []
+    for alias in ("999", "not-a-number"):
+        result = repo.query_attendance(alias)
+        assert result.outcome is LookupOutcome.UNKNOWN
+        assert result.records == ()
+        assert result.valid_students  # retry listing carried engine-side (AD-6)
+
+
+def test_query_attendance_ambiguous_ordinal_lists_candidates_never_guesses(repo):
+    """Two rosters sharing no='001' for different students: the ordinal is
+    ambiguous and the engine must refuse to pick one arbitrarily."""
+    repo.upsert_students(_students(1))  # 10009300 with no="001"
+    repo.upsert_students(
+        [StudentRecord(no="001", index="20000001", title="Ms", name="Other Roster")]
+    )
+
+    result = repo.query_attendance("001")
+
+    assert result.outcome is LookupOutcome.AMBIGUOUS
+    assert set(result.candidates) == {"10009300", "20000001"}
+    assert result.records == ()
+
+
+def test_query_attendance_known_student_without_rows_is_no_attendance(repo):
+    repo.upsert_students(_students(1))
+    result = repo.query_attendance("001")
+    assert result.outcome is LookupOutcome.NO_ATTENDANCE
+    assert result.records == ()
+
+
+def test_query_attendance_missing_db_file_is_empty_db_and_creates_nothing(tmp_path):
+    db_path = tmp_path / "nowhere" / "sams.db"
+    repo = AttendanceRepository(db_path=db_path)
+
+    result = repo.query_attendance("001")
+
+    assert result.outcome is LookupOutcome.EMPTY_DB
+    assert not db_path.exists()  # a read-only lookup must not create the DB
+
+
+def test_query_attendance_zero_padded_ordinal_still_resolves(repo):
+    """'00000002' is 8 digits but not a known index — it must fall through to
+    ordinal resolution instead of dead-ending as a phantom canonical index."""
+    repo.upsert_students(_students(3))
+    repo.save_attendance([_record("10009301")])
+
+    result = repo.query_attendance("00000002")
+
+    assert result.outcome is LookupOutcome.FOUND
+    assert result.records[0].student_index == "10009301"
 
 
 # --- Attendance upsert / re-processing --------------------------------------

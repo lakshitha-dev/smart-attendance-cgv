@@ -1,5 +1,5 @@
 ---
-status: review
+status: done
 epic: 2
 story: '2.2'
 title: Render the attendance timeline graph
@@ -102,3 +102,23 @@ Labelled figure renders for a student with data across multiple sessions (incl. 
 ## Change Log
 
 - 2026-07-16: Implemented Story 2.2 — `sams_core/visualization.py` (`render_attendance_timeline`, AD-7), `cli_display.show_figure`, and `infovis.py` wiring to render + display the per-Session attendance timeline with Ambiguous mid-band, UX-DR8 colours/icons, and attendance-rate annotation. Fixed a caption/x-tick-label overlap found during a manual visual check. Full regression suite passes (129/129).
+
+### Review Findings (code review 2026-07-16, Sprint-6 merge)
+
+- [x] [Review][Patch] Headless-safe backend is forced only in tests' conftest — production `render_attendance_timeline` imports pyplot and initializes a GUI backend before any SAMS_HEADLESS check (crash on display-less machines; TkAgg-in-worker-thread hazard under Streamlit) — force Agg in the engine when SAMS_HEADLESS=1 and in the web adapter unconditionally [sams_core/visualization.py:54]
+- [x] [Review][Patch] Figures are NEVER closed (engine registers via plt.subplots; show_figure returns without closing; tests leak 7/run; Streamlit reruns accumulate unbounded) — close after show/render everywhere + autouse close-all test fixture [cli_display.py:94, sams_core/visualization.py:61]
+- [x] [Review][Patch] `show_figure(fig)` ignores its argument (bare plt.show() shows the global registry), gates on the env var instead of the module's `_gui_disabled` mechanism, and has no failure guard unlike its cv2 sibling — honor the passed figure, share the gate, degrade gracefully, close after [cli_display.py:94]
+- [x] [Review][Patch] Top-level `from matplotlib.figure import Figure` makes sams.py pay matplotlib's import cost (and hard-fail without it) for a type annotation — TYPE_CHECKING guard [cli_display.py:18]
+- [x] [Review][Patch] `render_attendance_timeline([])` and `print_attendance_records([])` crash with IndexError — unguarded public engine/display APIs the Web UI calls — raise a typed error / guard [sams_core/visualization.py:85, cli_display.py:87]
+- [x] [Review][Patch] All-Ambiguous student captioned "Attendance rate: 0%" — the most damaging misread for exactly whom Ambiguous protects — caption "n/a" when the denominator is 0 [sams_core/visualization.py:38]
+- [x] [Review][Patch] Legend (upper right, frameless, inside axes) occludes the rightmost Present markers — the common case — move it outside the plot area [sams_core/visualization.py:101]
+- [x] [Review][Patch] Rate caption planted at axes-transform y=-0.5 where tight_layout cannot protect it — clips/overlaps with long tick labels — reserve layout space properly [sams_core/visualization.py:103]
+- [x] [Review][Patch] y-tick positions/labels are an independent hardcoded copy of `_STATUS_STYLE`'s y mapping — a reorder silently plots Present on the "Absent" row with tests green — derive ticks from the style table [sams_core/visualization.py:79]
+- [x] [Review][Patch] Non-ISO sheet_ids (AD-11 filename fallback) break the promised chronological ordering (lexicographic sort puts sheet10 before sheet2) — date-parse with lexicographic fallback + honest docstring [sams_core/visualization.py:56]
+- [x] [Review][Patch] Fixed 8-inch figure with one rotated tick per record is illegible at semester scale — scale width to record count [sams_core/visualization.py:61]
+- [x] [Review][Patch] The connecting line through y=-1/0/1 asserts false ordinality (Ambiguous rendered as "halfway present", contradicting the never-coerced rule) — use a steps-style connector [sams_core/visualization.py:62]
+- [x] [Review][Dismissed] pyplot-vs-OO thread safety — mitigated by forcing Agg + closing figures; full OO Figure would break CLI plt.show
+- [x] [Review][Dismissed] Duplicate sheet_id ticks — impossible for one student under the (student, sheet) PK; the same-date-sessions collision is already a deferred architecture item
+- [x] [Review][Dismissed] Headless CLI run persists no PNG — the Auditor confirmed the spec requires display only; a --save flag is future scope
+- [x] [Review][Dismissed] Check/cross glyph coverage under exotic fonts — DejaVu Sans is bundled with matplotlib
+- [x] [Review][Note] DoD "greyscale printout readable" was ticked without recorded proof — status colours converge to identical grey; the y-band + icons carry readability (verified this review). File List names two files missing from the story diff; 2.1 scope entangled in 2.2's change set
