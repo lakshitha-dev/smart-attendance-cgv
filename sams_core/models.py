@@ -96,3 +96,5 @@ class SheetResult:
     # Story 1.5 (additive, defaults required so 1.3/1.4 constructions keep working):
     sheet_id: str | None = None  # resolved Sheet Identifier (AD-11)
     records: tuple["AttendanceRecord", ...] = ()  # one per Student Record (FR-5)
+    persisted_count: int | None = None  # attendance rows actually written this run
+    preserved_count: int | None = None  # rows kept because of operator resolutions

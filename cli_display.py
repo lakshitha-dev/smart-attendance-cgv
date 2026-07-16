@@ -64,10 +64,14 @@ def print_run_summary(result) -> None:
 
     `result` is the engine's SheetResult: Attendance Records carry the
     canonical Student Index, name, and first-class status (Ambiguous included).
+    The saved-count line reports what was actually written — rows preserved by
+    an earlier operator resolution are called out via the engine's warning.
     """
     print(f"Parsed {len(result.records)} Student Records. Sheet Identifier: {result.sheet_id}")
     for warning in result.warnings:
         print(f"Warning: {warning}")
     for record in result.records:
         print(f"{record.student_index}  {record.student_name}: {record.status.value}")
-    print(f"Saved {len(result.records)} Attendance Records to the Local DB.")
+    saved = result.persisted_count if result.persisted_count is not None else len(result.records)
+    print(f"Saved {saved} Attendance Records to the Local DB.")
+    print(f"Signature crops: {config.OUTPUT_DIR / str(result.sheet_id) / 'crops'}")

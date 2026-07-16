@@ -55,8 +55,8 @@ development_status:
   1-2-watch-preprocessing-stages-live-and-saved: done
   1-3-locate-student-table-and-signature-cells: done
   1-4-classify-each-signature-cell: done
-  1-5-persist-attendance-and-report-results: review
-  1-6-prove-detection-accuracy-on-all-five-sheets: review
+  1-5-persist-attendance-and-report-results: done
+  1-6-prove-detection-accuracy-on-all-five-sheets: done
   1-7-run-everything-on-a-fresh-machine: ready-for-dev
   epic-1-retrospective: optional
   epic-2: in-progress

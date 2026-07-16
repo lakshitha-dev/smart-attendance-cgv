@@ -1,12 +1,19 @@
+import os
 from pathlib import Path
 
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-DB_PATH = PROJECT_ROOT / "sams.db"
-OUTPUT_DIR = PROJECT_ROOT / "output"
+# SAMS_DB_PATH / SAMS_OUTPUT_DIR env overrides exist so test suites and scripted
+# runs can redirect ALL persistence away from the real working data (AD-9) —
+# defaults stay relative to the project root (FR-15).
+DB_PATH = Path(os.environ.get("SAMS_DB_PATH", PROJECT_ROOT / "sams.db"))
+OUTPUT_DIR = Path(os.environ.get("SAMS_OUTPUT_DIR", PROJECT_ROOT / "output"))
 REFERENCES_DIR = PROJECT_ROOT / "references"
+
+# Wait this long for a concurrent writer before failing a DB operation (AD-4).
+DB_BUSY_TIMEOUT_S = 10.0
 
 SUPPORTED_IMAGE_EXTENSIONS = (".png", ".jpeg", ".jpg")
 
@@ -62,9 +69,13 @@ LOCATE_METADATA_TABLE_COLUMNS = 4  # Date | Time | Lecturer's Name | Lecturer Si
 LOCATE_GRID_MASK_DILATION_PX = 5  # dilate detected line pixels by this to build the grid mask
 
 # Signature detection & classification (Story 1.4): measure ink per Signature Cell.
-# The classification bands at the bottom of this section were tuned on 2026-07-13
-# against the committed tests/data/ground_truth.csv (see the note on the bands
-# themselves); Story 1.6 owns the executable accuracy gate that keeps them honest.
+# The classification bands at the bottom of this section were tuned during the
+# 2026-07-13 review against the 30-row adjudication now committed as
+# tests/data/ground_truth.csv. Provenance note: the adjudication was performed in
+# the working tree BEFORE the tuning and both landed on 2026-07-16 as adjacent
+# commits (ground truth first, 069f99d -> 0436aee) — the ordering is attested by
+# the review record, not independently provable from timestamps. Story 1.6 owns
+# the executable accuracy gate that keeps these values honest from here on.
 # All values are GLOBAL across sheets (SM-C1) - never per-sheet.
 
 # Signature column: the Signature Cell is the rightmost column of the 5-column
@@ -110,10 +121,12 @@ for _odd_constant in ("DENOISE_MEDIAN_KERNEL", "THRESHOLD_BLOCK_SIZE"):
 # (un-dilated) ROI area. coverage >= PRESENT -> Present, <= ABSENT -> Absent,
 # otherwise Ambiguous (a first-class result, never coerced either way).
 #
-# Tuned against the committed tests/data/ground_truth.csv (adjudicated BEFORE this
-# tuning, per PRD §6.3): across all five sample sheets, genuine signatures measure
-# >= 5.1% coverage while empty cells (including stray fragments of a neighbouring
-# row's stroke at the printed boundary) measure <= 1.0%. The bands below keep a
-# >= 1.5x margin on each side of that separation; values are GLOBAL (SM-C1).
+# Tuned against the 30-row adjudication committed as tests/data/ground_truth.csv
+# (adjudicated before the tuning — see the provenance note at the top of this
+# section and TUNING_LOG.md's 2026-07-16 addendum): across all five sample
+# sheets, genuine signatures measure >= 5.1% coverage while empty cells
+# (including stray fragments of a neighbouring row's stroke at the printed
+# boundary) measure <= 1.0%. The bands below keep a >= 1.5x margin on each side
+# of that separation; values are GLOBAL (SM-C1).
 INK_COVERAGE_PRESENT_THRESHOLD = 0.030
 INK_COVERAGE_ABSENT_THRESHOLD = 0.015

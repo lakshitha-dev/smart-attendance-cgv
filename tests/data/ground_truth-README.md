@@ -4,11 +4,17 @@
   five sample sheets: `status ∈ {Present, Absent, Disputed}`. Disputed rows are excluded
   from SM-1 scoring and reported separately (PRD §7).
 - **Adjudicated:** 2026-07-13, by visual inspection of `sample_signin-sheets/1..5.jpeg`,
-  **before** any detection-threshold tuning (PRD §6.3 / AD-9 ordering rule). The team
+  in the working tree **before** any detection-threshold tuning (PRD §6.3 / AD-9
+  ordering rule). Committed 2026-07-16 as commit `069f99d`, immediately ahead of the
+  tuned constants (`0436aee`) — the adjudicate-before-tune ordering is attested by this
+  record and the commit sequence, not independently provable from timestamps. The team
   should ratify it; change it only by re-adjudication, never to make a test pass.
-- **Straddle notes:** sheet 2019-06-21 rows 2–3 and sheets 2019-05-31 / 2019-07-12 contain
-  signatures drawn high/overlapping adjacent rows — attributed per PRD FR-4's
-  one-cell-per-component rule.
+- **Straddle notes (reconciled 2026-07-16):** several signatures are drawn high enough
+  to touch or cross the printed rule above their row — most visibly on sheets
+  2019-05-31, 2019-06-21, and 2019-07-12 (rows 1–3 area), and on 2019-07-05 where row 3's
+  signature crosses the row 2/3 rule (it belongs to row 3; the same student signs
+  identically on sheets 1, 2, 5). Attribution follows PRD FR-4's one-cell-per-component
+  rule. Both adjudications agree on every status regardless of these prose observations.
 - **Format:** plain CSV, header first, no comment lines — safe for `csv.DictReader`
   and `pandas.read_csv` without special options (Story 1.6's harness relies on this).
 - **Independently re-adjudicated** during Story 1.6 (sprint-5) — both adjudications

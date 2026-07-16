@@ -33,6 +33,18 @@ def _status_by_row_index(cell_results: Sequence) -> dict[int, AttendanceStatus]:
     return {cell.row_index: cell.status for cell in cell_results}
 
 
+def _row_indices_are_aligned(cell_results: Sequence, student_count: int) -> bool:
+    """True when detected rows are exactly 0..N-1 for the N-student roster.
+
+    Length equality alone is a weak proxy: duplicate or out-of-range
+    `row_index` values (e.g. [0, 0, 2] or [0, 1, 5]) match on length but are
+    NOT a trustworthy row-order alignment — indexing the roster with them
+    would mis-assign or crash.
+    """
+    indices = [cell.row_index for cell in cell_results]
+    return sorted(indices) == list(range(student_count))
+
+
 def map_detections_to_students(
     cell_results: Sequence,
     info_file: InfoFile,
@@ -96,7 +108,7 @@ def student_indices_in_row_order(
     another's index and corrupt Epic 3's verification set, so on any mismatch
     callers fall back to row ordinals instead of guessing the alignment.
     """
-    if len(cell_results) != len(students):
+    if not _row_indices_are_aligned(cell_results, len(students)):
         return None
     # Rows are in row order and the roster is in `no` order — the same order.
     return [students[cell.row_index].index for cell in cell_results]

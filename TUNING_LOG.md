@@ -1,3 +1,22 @@
+> **ADDENDUM (2026-07-16, post-merge review) — READ THIS FIRST.**
+> The diagnosis below was written against the ORIGINAL Hough-based `locate.py` and is
+> superseded on every material point by the 2026-07-13 morphological localization rework
+> merged from `fix-localization-detection`:
+>
+> - **Gate status: GREEN — 30/30 (100%) on all five sheets** (`pytest tests/test_accuracy.py`).
+>   The "RED / 76.7%" status below predates the rework; do NOT activate the descope ladder from it.
+> - Localization now detects the full 6-v-line grid on all five sheets; detection uses
+>   `cell_rois`, so `DETECT_SIGNATURE_COLUMN_FALLBACK_FRACTION` (tuned below) is a
+>   rarely-exercised fallback, untested on current geometry — re-validate it if
+>   localization ever fails on a real sheet.
+> - The `LOCATE_HOUGH_*` constants recommended below NO LONGER EXIST; the current
+>   tunables are the `LOCATE_*` morphological family in `sams_core/config.py`.
+> - The classification bands were retuned 0.020/0.006 → **0.030/0.015** during the
+>   2026-07-13 review (commit 0436aee), against the same 30-row adjudication this log's
+>   protocol demands: measured separation was genuine ink >= 5.1% vs empty-cell
+>   noise <= 1.0%, and the chosen bands keep >= 1.5x margin on each side. The
+>   statement below that the bands were "left unchanged" described the pre-rework state.
+
 # Story 1.6 Tuning Log — accuracy gate (SM-1..SM-3)
 
 **Status: gate is RED.** `pytest tests/test_accuracy.py::test_sm1_classification_accuracy_on_non_disputed_rows`

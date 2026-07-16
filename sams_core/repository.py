@@ -13,16 +13,19 @@ every SQLite access. Design invariants (AD-4):
   short ordinal (`002`/`2`) is resolved by `resolve_student_index` — the ONE
   resolver — before any read/write. No adapter parses index forms itself.
 - No image blobs: only signature-image *paths* are registered.
+- One sheet's persistence (`persist_run`) is a SINGLE transaction (AD-12): a
+  failure mid-persist rolls everything back — never partial state.
 
 This module never imports a UI framework and never prints/exits (AD-6).
 """
 
 import sqlite3
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
 from sams_core import config
+from sams_core.errors import ProcessingError
 from sams_core.models import AttendanceRecord, AttendanceStatus
 
 
@@ -41,16 +44,21 @@ class AttendanceRepository:
 
         No connection is cached or shared — every call opens its own, so
         Streamlit worker threads and concurrent CLI runs never contend over one
-        handle (AD-4).
+        handle (AD-4). A busy writer is waited on up to the configured timeout;
+        sqlite-level operational failures surface as `ProcessingError` (AD-6 —
+        never a raw sqlite3 exception past the engine boundary).
         """
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self._db_path)
+        conn = sqlite3.connect(self._db_path, timeout=config.DB_BUSY_TIMEOUT_S)
         conn.row_factory = sqlite3.Row
         try:
             self._ensure_schema(conn)
             yield conn
             conn.commit()
-        except Exception:
+        except sqlite3.OperationalError as exc:
+            conn.rollback()
+            raise ProcessingError(f"Local DB unavailable: {exc}") from exc
+        except BaseException:  # incl. KeyboardInterrupt: never leave a half-open tx
             conn.rollback()
             raise
         finally:
@@ -58,20 +66,24 @@ class AttendanceRepository:
 
     @staticmethod
     def _ensure_schema(conn: sqlite3.Connection) -> None:
-        """Create the three tables if absent (idempotent). Glossary-verbatim columns."""
+        """Create the three tables if absent (idempotent). Glossary-verbatim columns.
+
+        Key columns are NOT NULL explicitly: SQLite's TEXT PRIMARY KEY quirk
+        would otherwise admit NULL keys that the upsert can never deduplicate.
+        """
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS students (
-                student_index TEXT PRIMARY KEY,
+                student_index TEXT NOT NULL PRIMARY KEY,
                 no            TEXT,
                 title         TEXT,
                 name          TEXT
             );
 
             CREATE TABLE IF NOT EXISTS attendance (
-                student_index        TEXT,
-                sheet_id             TEXT,
-                status               TEXT,
+                student_index        TEXT NOT NULL,
+                sheet_id             TEXT NOT NULL,
+                status               TEXT NOT NULL,
                 subject_code         TEXT,
                 subject_name         TEXT,
                 session_time         TEXT,
@@ -81,10 +93,10 @@ class AttendanceRepository:
             );
 
             CREATE TABLE IF NOT EXISTS signature_images (
-                student_index TEXT,
-                sheet_id      TEXT,
-                kind          TEXT,
-                path          TEXT,
+                student_index TEXT NOT NULL,
+                sheet_id      TEXT NOT NULL,
+                kind          TEXT NOT NULL,
+                path          TEXT NOT NULL,
                 PRIMARY KEY (student_index, sheet_id, kind)
             );
             """
@@ -97,31 +109,39 @@ class AttendanceRepository:
 
     # --- Students -------------------------------------------------------------
 
+    @staticmethod
+    def _upsert_students(conn: sqlite3.Connection, students: Iterable) -> None:
+        rows = [(s.index, s.no, s.title, s.name) for s in students]
+        conn.executemany(
+            """
+            INSERT INTO students (student_index, no, title, name)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(student_index) DO UPDATE SET
+                no = excluded.no,
+                title = excluded.title,
+                name = excluded.name
+            """,
+            rows,
+        )
+
     def upsert_students(self, students: Iterable) -> None:
         """Insert/update Student Records keyed on the canonical Student Index.
 
         Idempotent: re-processing the same roster updates in place, never
         duplicates. Accepts `StudentRecord`-shaped objects (no/index/title/name).
         """
-        rows = [(s.index, s.no, s.title, s.name) for s in students]
         with self._connect() as conn:
-            conn.executemany(
-                """
-                INSERT INTO students (student_index, no, title, name)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(student_index) DO UPDATE SET
-                    no = excluded.no,
-                    title = excluded.title,
-                    name = excluded.name
-                """,
-                rows,
-            )
+            self._upsert_students(conn, students)
 
     def list_students(self) -> list[dict]:
-        """All known Student Records (AD-4 read API), ordered by `no` then index."""
+        """All known Student Records (AD-4 read API), ordered by canonical index.
+
+        (Ordering by `no` would sort TEXT lexicographically — "10" < "2" — and
+        `no` is roster-relative, so the stable canonical index orders instead.)
+        """
         with self._connect() as conn:
             cursor = conn.execute(
-                "SELECT student_index, no, title, name FROM students ORDER BY no, student_index"
+                "SELECT student_index, no, title, name FROM students ORDER BY student_index"
             )
             return [dict(row) for row in cursor.fetchall()]
 
@@ -129,7 +149,11 @@ class AttendanceRepository:
         """The ONE index resolver (AD-4): alias -> canonical 8-digit index or None.
 
         - An 8-digit form passes through unchanged (the canonical key).
-        - A short ordinal (`002`, `2`) resolves via the `students` roster's `no`.
+        - A short ordinal (`002`, `2`) resolves via the rosters' `no` values.
+          Ordinals are roster-relative: if the same ordinal maps to MORE THAN
+          ONE student across the rosters ever ingested, the alias is ambiguous
+          and resolves to None (a no-data outcome the frontends present with
+          the valid-indices list) rather than an arbitrary student.
         - Anything unresolvable returns None — never raises (AD-6: unknown index
           is a no-data result, not an error).
         """
@@ -140,67 +164,133 @@ class AttendanceRepository:
             return candidate
         if not (candidate.isascii() and candidate.isdigit()):
             return None
-        # Short ordinal: match on integer value so "2" and "002" both find no="002".
         with self._connect() as conn:
-            cursor = conn.execute(
-                "SELECT student_index, no FROM students WHERE CAST(no AS INTEGER) = ?",
-                (int(candidate),),
-            )
-            row = cursor.fetchone()
-        return row["student_index"] if row is not None else None
+            rows = conn.execute("SELECT student_index, no FROM students").fetchall()
+        matches = {
+            row["student_index"]
+            for row in rows
+            if str(row["no"] or "").strip().isdigit() and int(row["no"]) == int(candidate)
+        }
+        return matches.pop() if len(matches) == 1 else None
 
     # --- Attendance -----------------------------------------------------------
 
+    @staticmethod
+    def _save_attendance(
+        conn: sqlite3.Connection, records: Iterable[AttendanceRecord], overwrite: bool
+    ) -> tuple[int, int]:
+        """Upsert records on an open connection. Returns (saved, preserved)."""
+        saved = preserved = 0
+        for record in records:
+            existing = conn.execute(
+                "SELECT resolved_by_operator FROM attendance "
+                "WHERE student_index = ? AND sheet_id = ?",
+                (record.student_index, record.sheet_id),
+            ).fetchone()
+            if (
+                existing is not None
+                and existing["resolved_by_operator"] == 1
+                and not overwrite
+            ):
+                # Preserve the operator's status + flag, but keep the row's
+                # session metadata current (a corrected Info File must not
+                # leave resolved rows carrying stale subject/session values).
+                conn.execute(
+                    "UPDATE attendance SET subject_code = ?, subject_name = ?, "
+                    "session_time = ?, lecturer = ? "
+                    "WHERE student_index = ? AND sheet_id = ?",
+                    (
+                        record.subject_code,
+                        record.subject_name,
+                        record.session_time,
+                        record.lecturer,
+                        record.student_index,
+                        record.sheet_id,
+                    ),
+                )
+                preserved += 1
+                continue
+            conn.execute(
+                """
+                INSERT INTO attendance (
+                    student_index, sheet_id, status, subject_code,
+                    subject_name, session_time, lecturer, resolved_by_operator
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(student_index, sheet_id) DO UPDATE SET
+                    status = excluded.status,
+                    subject_code = excluded.subject_code,
+                    subject_name = excluded.subject_name,
+                    session_time = excluded.session_time,
+                    lecturer = excluded.lecturer,
+                    resolved_by_operator = excluded.resolved_by_operator
+                """,
+                (
+                    record.student_index,
+                    record.sheet_id,
+                    record.status.value,
+                    record.subject_code,
+                    record.subject_name,
+                    record.session_time,
+                    record.lecturer,
+                    1 if record.resolved_by_operator else 0,
+                ),
+            )
+            saved += 1
+        return saved, preserved
+
     def save_attendance(
         self, records: Iterable[AttendanceRecord], overwrite: bool = False
-    ) -> None:
+    ) -> tuple[int, int]:
         """Upsert one Attendance Record per Student Record (AD-4).
 
         Overwrite semantics:
         - An existing row with `resolved_by_operator=1` and `overwrite=False`
           keeps the human's status and flag (re-processing never clobbers a
-          hand resolution).
-        - With `overwrite=True`, the row is replaced and the flag reset to 0.
+          hand resolution); its session metadata is still refreshed.
+        - With `overwrite=True`, the row is replaced using the record's own
+          `resolved_by_operator` value.
         - Re-processing updates in place, keyed (Student Index, Sheet Identifier)
           — never duplicates.
+
+        Returns (saved, preserved) row counts so frontends can report honestly.
         """
         with self._connect() as conn:
-            for record in records:
-                existing = conn.execute(
-                    "SELECT resolved_by_operator FROM attendance "
-                    "WHERE student_index = ? AND sheet_id = ?",
-                    (record.student_index, record.sheet_id),
-                ).fetchone()
-                if (
-                    existing is not None
-                    and existing["resolved_by_operator"] == 1
-                    and not overwrite
-                ):
-                    continue  # preserve the operator's resolution
-                conn.execute(
-                    """
-                    INSERT INTO attendance (
-                        student_index, sheet_id, status, subject_code,
-                        subject_name, session_time, lecturer, resolved_by_operator
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-                    ON CONFLICT(student_index, sheet_id) DO UPDATE SET
-                        status = excluded.status,
-                        subject_code = excluded.subject_code,
-                        subject_name = excluded.subject_name,
-                        session_time = excluded.session_time,
-                        lecturer = excluded.lecturer,
-                        resolved_by_operator = 0
-                    """,
-                    (
-                        record.student_index,
-                        record.sheet_id,
-                        record.status.value,
-                        record.subject_code,
-                        record.subject_name,
-                        record.session_time,
-                        record.lecturer,
-                    ),
-                )
+            return self._save_attendance(conn, records, overwrite)
+
+    def persist_run(
+        self,
+        students: Iterable,
+        records: Sequence[AttendanceRecord],
+        sheet_id: str,
+        registrations: Sequence[tuple[str, str, str, str]] = (),
+        overwrite: bool = False,
+    ) -> tuple[int, int]:
+        """Persist one processed sheet ATOMICALLY (AD-12): one transaction for
+        the roster upsert, all attendance rows, and the signature-image
+        registrations. A failure anywhere rolls the whole run back — the DB is
+        never left with a roster but no attendance, or half the registrations.
+
+        Stale `signature_images` rows for this sheet are cleared first (issued
+        as the transaction's opening write, which also serializes concurrent
+        writers): a re-run may produce fewer/renamed crops, and dangling paths
+        from the previous run must not survive.
+
+        Returns (saved, preserved) attendance row counts.
+        """
+        with self._connect() as conn:
+            conn.execute("DELETE FROM signature_images WHERE sheet_id = ?", (sheet_id,))
+            self._upsert_students(conn, students)
+            saved, preserved = self._save_attendance(conn, records, overwrite)
+            conn.executemany(
+                """
+                INSERT INTO signature_images (student_index, sheet_id, kind, path)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(student_index, sheet_id, kind) DO UPDATE SET
+                    path = excluded.path
+                """,
+                [(idx, sid, kind, str(path)) for idx, sid, kind, path in registrations],
+            )
+            return saved, preserved
 
     def _write_status(
         self,
@@ -209,17 +299,20 @@ class AttendanceRepository:
         student_index: str,
         status: AttendanceStatus,
         by_operator: bool,
-    ) -> None:
+    ) -> bool:
         """Shared write path for resolve/undo — updates status + operator flag in place.
 
         Subject/session metadata on the existing row is preserved (this is a
-        status change on an already-persisted Attendance Record).
+        status change on an already-persisted Attendance Record). Returns True
+        when a row was actually updated — callers must not treat a zero-row
+        UPDATE (typo'd index/sheet) as success.
         """
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE attendance SET status = ?, resolved_by_operator = ? "
             "WHERE student_index = ? AND sheet_id = ?",
             (status.value, 1 if by_operator else 0, student_index, sheet_id),
         )
+        return cursor.rowcount > 0
 
     def resolve(
         self,
@@ -227,25 +320,31 @@ class AttendanceRepository:
         student_index: str,
         status: AttendanceStatus,
         by_operator: bool = True,
-    ) -> None:
+    ) -> bool:
         """Operator resolution of a Signature Cell (AD-4 write API).
 
         Sets the status and marks `resolved_by_operator` so re-processing without
-        `overwrite=True` will not clobber it.
+        `overwrite=True` will not clobber it. Returns True if the row existed and
+        was updated; False means nothing matched (typo'd sheet/index) and the
+        caller must surface that — a silent no-op is not a resolution.
         """
         with self._connect() as conn:
-            self._write_status(conn, sheet_id, student_index, status, by_operator)
+            return self._write_status(conn, sheet_id, student_index, status, by_operator)
 
-    def undo_resolution(self, sheet_id: str, student_index: str) -> None:
+    def undo_resolution(self, sheet_id: str, student_index: str) -> bool:
         """Undo an operator resolution: restore Ambiguous and clear the flag (AD-4).
 
-        Routed through the same write path as `resolve` so both share one code
-        path and cannot drift.
+        Guarded on `resolved_by_operator = 1`: undoing a row that was never
+        operator-resolved must not destroy the machine's Present/Absent verdict.
+        Returns True if an operator resolution was actually undone.
         """
         with self._connect() as conn:
-            self._write_status(
-                conn, sheet_id, student_index, AttendanceStatus.AMBIGUOUS, by_operator=False
+            cursor = conn.execute(
+                "UPDATE attendance SET status = ?, resolved_by_operator = 0 "
+                "WHERE student_index = ? AND sheet_id = ? AND resolved_by_operator = 1",
+                (AttendanceStatus.AMBIGUOUS.value, student_index, sheet_id),
             )
+            return cursor.rowcount > 0
 
     def has_operator_resolutions(self, sheet_id: str) -> bool:
         """True if any row for this sheet carries an operator resolution (AD-4).

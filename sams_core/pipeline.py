@@ -364,6 +364,15 @@ def process_sheet(
     for warning in mapping_warnings:
         if warning not in sheet_result.warnings:
             sheet_result.warnings.append(warning)
+    if mapping_warnings:
+        # locate.py already flagged the same row-count mismatch in its own
+        # wording; keep only the UX error-catalog copy so the operator sees
+        # ONE warning per condition (EXPERIENCE.md wording wins for output).
+        sheet_result.warnings = [
+            w
+            for w in sheet_result.warnings
+            if "student rows, Info File has" not in w
+        ]
 
     # 5. Save crops named by Student Index (falls back to row ordinals on mismatch).
     student_indices = mapping.student_indices_in_row_order(
@@ -371,15 +380,25 @@ def process_sheet(
     )
     crop_paths = detect.save_crops(sheet_id, cell_results, student_indices=student_indices)
 
-    # 6. Persist LAST, after everything above succeeded (AD-12).
-    repo = repository if repository is not None else AttendanceRepository()
-    repo.upsert_students(info_file.students)
-    repo.save_attendance(records, overwrite=overwrite)
+    # 6. Persist LAST, in ONE transaction (AD-12: all-or-nothing — a failure
+    #    mid-persist rolls back roster, attendance, and registrations together).
+    registrations = []
     if student_indices is not None:
-        for cell, path in zip(cell_results, crop_paths):
-            repo.register_signature_image(
-                student_indices[cell.row_index], sheet_id, _PROBE_IMAGE_KIND, path
-            )
+        registrations = [
+            (student_indices[cell.row_index], sheet_id, _PROBE_IMAGE_KIND, path)
+            for cell, path in zip(cell_results, crop_paths)
+        ]
+    repo = repository if repository is not None else AttendanceRepository()
+    saved, preserved = repo.persist_run(
+        info_file.students, records, sheet_id, registrations, overwrite=overwrite
+    )
+    sheet_result.persisted_count = saved
+    sheet_result.preserved_count = preserved
+    if preserved:
+        sheet_result.warnings.append(
+            f"{preserved} row(s) kept their earlier operator resolutions "
+            "(re-run with --overwrite to replace them)"
+        )
 
-    # 7. Return the SheetResult carrying sheet_id, records, and warnings.
+    # 7. Return the SheetResult carrying sheet_id, records, counts, and warnings.
     return sheet_result

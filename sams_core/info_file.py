@@ -89,6 +89,17 @@ def parse_info_file(path: str) -> InfoFile:
             )
         students.append(StudentRecord(no=no, index=index, title=title, name=name))
 
+    # Duplicate keys silently collapse downstream (one attendance row, one crop
+    # file, one roster entry for two students) — reject them at the source.
+    for attr in ("index", "no"):
+        values = [getattr(s, attr) for s in students]
+        duplicates = {v for v in values if values.count(v) > 1}
+        if duplicates:
+            raise InputError(
+                f"Info File contains duplicate student {attr} value(s): "
+                f"{', '.join(sorted(duplicates))}"
+            )
+
     return InfoFile(session=session, students=tuple(students))
 
 
