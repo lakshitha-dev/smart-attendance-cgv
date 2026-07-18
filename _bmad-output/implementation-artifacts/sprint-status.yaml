@@ -70,7 +70,7 @@ development_status:
   epic-3-retrospective: optional
   epic-4: in-progress
   4-1-open-sams-in-the-browser: done
-  4-2-upload-and-process-with-one-tap: ready-for-dev
+  4-2-upload-and-process-with-one-tap: review
   4-3-watch-pipeline-and-read-results: ready-for-dev
   4-4-resolve-ambiguous-row-with-one-tap: ready-for-dev
   4-5-look-up-a-student-from-the-browser: done

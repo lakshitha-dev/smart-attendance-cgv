@@ -1,5 +1,5 @@
 ---
-status: ready-for-dev
+status: review
 epic: 4
 story: '4.2'
 title: Upload a sheet and process it with one tap
@@ -7,6 +7,7 @@ frs: [FR-12]
 uxdrs: [UX-DR3, UX-DR4, UX-DR5, UX-DR12]
 owner: M8 (Topic 8), with M2 on upload/DB wiring
 sprint: Week 2, Days 6–7 · 🔒 gated
+baseline_commit: 7521ec7
 ---
 
 # Story 4.2: Upload a sheet and process it with one tap
@@ -51,3 +52,58 @@ So that processing happens exactly when I say so — and never accidentally.
 ## Definition of Done
 
 Phone-browser test: upload → Process runs once; rerun-storm test (scroll/expand/interact) triggers zero re-processing; overwrite warning fires only when resolutions exist; both error-catalog paths render.
+
+## Tasks / Subtasks
+
+- [x] Task 1: Engine — `parse_info_file_bytes` (info_file.py refactored to share `_build_info_file`) so the Web UI validates the uploaded XML with the same schema/errors as the CLI (AD-12; no path needed)
+- [x] Task 2: `webui/process_logic.py` — Streamlit-free orchestration: parse_info (AD-11 date resolution, never filename), run_process (overwrite gate via has_operator_resolutions, engine call, UX-DR12 error-catalog mapping)
+- [x] Task 3: Process page wiring — two slots + slate Ready, AD-11 date field only when the Info File lacks a date, one-shot fence via st.button + session_state, UX-DR5 overwrite gate (Keep resolutions / Overwrite everything), error surface preserving inputs
+- [x] Task 4: Pure tests (test_process_logic.py) — parse/date/overwrite/error mapping + one real end-to-end engine run
+- [x] Task 5: AppTest tests (test_webui_process.py) — empty state, no-side-effect-on-load, rerun-storm renders stored outcome with zero re-processing, overwrite gate, error surfacing
+
+## Dev Agent Record
+
+### Implementation Plan
+
+Same thin-adapter split the Lookup/Investigate pages use: a Streamlit-free
+`process_logic.py` owns sequencing + copy, the page owns widgets + the rerun
+fence. The one hard part (AC2) is the fence — solved with Streamlit's own
+button semantics: `st.button` returns True only on the press rerun, so the
+engine call sits in `if process_clicked:` and the OUTCOME is stashed in
+session_state for all subsequent reruns to re-render without re-calling.
+
+### Completion Notes
+
+- One-shot fence proven by AppTest: injecting a stored outcome and re-running
+  (the scroll/expand rerun storm) calls the engine ZERO times; a plain load
+  also never calls it.
+- AD-11 honoured: `parse_info` resolves the Sheet Identifier from the Info
+  File's date, else from an operator-entered date — `resolve_sheet_identifier`
+  is called with `date_flag=` only, NEVER `image_path=`, so the upload filename
+  can never become the Sheet Identifier in the Web UI.
+- Overwrite gate (UX-DR5): run_process returns needs_overwrite_choice and does
+  not process when has_operator_resolutions is true and no decision was made;
+  the page shows Keep resolutions (primary) / Overwrite everything (outline).
+- Error catalog (UX-DR12) verbatim for bad image / bad info file / missing
+  date; decode-level only (a dim/skewed photo proceeds); inputs stay in slots.
+- Engine addition: `parse_info_file_bytes` (info_file.py refactored to a shared
+  `_build_info_file`); image bytes were already supported by process_sheet.
+- Scope honoured: the rich stage strip (UX-DR6) and results row list (UX-DR7)
+  are Story 4.3 — 4.2 shows a spinner + a saved-count confirmation.
+- Full suite 223 passed (14 new); live streamlit HTTP 200 smoke.
+
+### File List
+
+- sams_core/info_file.py (parse_info_file_bytes + _build_info_file refactor)
+- webui/process_logic.py (new)
+- webui/pages/Process.py (wired the run; was the 4.1 empty-state shell)
+- tests/test_process_logic.py (new)
+- tests/test_webui_process.py (new)
+- _bmad-output/implementation-artifacts/4-2-upload-and-process-with-one-tap.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+
+### Change Log
+
+- 2026-07-18: Story 4.2 implemented — engine parse_info_file_bytes, process_logic
+  orchestration, one-tap fenced Process run with AD-11 date field, UX-DR5
+  overwrite gate and UX-DR12 error catalog. 223/223 green; HTTP 200 smoke.
