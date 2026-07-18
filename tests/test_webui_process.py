@@ -43,24 +43,15 @@ def test_process_page_renders_stored_outcome_without_reprocessing(tmp_path, monk
     monkeypatch.setenv("SAMS_DB_PATH", str(tmp_path / "sams.db"))
     calls = []
     import webui.process_logic as pl
-    from sams_core.models import SheetResult
 
     monkeypatch.setattr(pl, "process_sheet_run", lambda *a, **k: calls.append(1))
+
+    from sams_core.models import AttendanceStatus as S
 
     at = AppTest.from_file(str(PAGE), default_timeout=30)
     at.session_state["_input_sig"] = (None, None, None)
     at.session_state["process_outcome"] = pl.ProcessOutcome(
-        result=SheetResult(
-            warnings=[],
-            detected_row_count=6,
-            metadata_row_y_range=None,
-            student_table_y_range=None,
-            detected_grid_lines={},
-            sheet_id="2019-05-31",
-            persisted_count=6,
-            preserved_count=0,
-        ),
-        sheet_id="2019-05-31",
+        result=_result([_rec("10000409", "Alice", S.PRESENT)]), sheet_id="2019-05-31"
     )
     at.run()
 
@@ -166,6 +157,45 @@ def test_process_page_row_count_mismatch_shows_flag_banner(tmp_path, monkeypatch
 
     assert not at.exception
     assert any("row order" in w.value for w in at.warning)  # a flag, not a failure
+
+
+def test_process_page_escapes_markdown_and_html_in_student_name(tmp_path, monkeypatch):
+    """A name carrying markdown/markup must neither format nor inject (the row
+    is HTML-escaped, unlike a bare st.markdown(f'**{name}**'))."""
+    monkeypatch.setenv("SAMS_DB_PATH", str(tmp_path / "sams.db"))
+    import webui.process_logic as pl
+    from sams_core.models import AttendanceStatus as S
+
+    hostile = "Ann [tap](http://evil) <script>x</script> **bold**"
+    at = AppTest.from_file(str(PAGE), default_timeout=30)
+    at.session_state["_input_sig"] = (None, None, None)
+    at.session_state["process_outcome"] = pl.ProcessOutcome(
+        result=_result([_rec("10000409", hostile, S.PRESENT)]), sheet_id="2019-05-31"
+    )
+    at.run()
+
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+    assert "<script>" not in body  # escaped, never a live tag
+    assert "&lt;script&gt;" in body
+    assert "](http://evil)" in body  # the link syntax renders as literal text
+
+
+def test_process_page_empty_records_shows_no_students_message_not_saved(tmp_path, monkeypatch):
+    monkeypatch.setenv("SAMS_DB_PATH", str(tmp_path / "sams.db"))
+    import webui.process_logic as pl
+
+    at = AppTest.from_file(str(PAGE), default_timeout=30)
+    at.session_state["_input_sig"] = (None, None, None)
+    at.session_state["process_outcome"] = pl.ProcessOutcome(
+        result=_result([]), sheet_id="2019-05-31"
+    )
+    at.run()
+
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown) + " ".join(c.value for c in at.caption)
+    assert "Results saved." not in body  # no false success on zero detections
+    assert any("couldn't find any students" in i.value for i in at.info)
 
 
 def test_process_page_error_outcome_surfaces_catalog_copy(tmp_path, monkeypatch):

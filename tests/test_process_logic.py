@@ -227,13 +227,28 @@ def test_results_summary_singular_plural_and_ambiguous_call_to_action():
     )
 
 
-def test_status_chip_map_has_icon_label_and_class_for_every_status():
+def test_status_chip_map_has_icon_label_and_exact_hex_for_every_status():
     from webui.process_logic import STATUS_CHIP
 
+    expected_hex = {
+        AttendanceStatus.PRESENT: "#256E4C",
+        AttendanceStatus.ABSENT: "#A63D2A",
+        AttendanceStatus.AMBIGUOUS: "#7A6212",
+    }
     assert set(STATUS_CHIP) == set(AttendanceStatus)
-    for status, (icon, label, css) in STATUS_CHIP.items():
-        assert icon and label and css.startswith("sams-chip-")
-        assert label == status.value  # chip label matches the canonical status
+    for status, (icon, label, colour) in STATUS_CHIP.items():
+        assert icon and label == status.value  # icon + label (greyscale-survivable)
+        assert colour == expected_hex[status]  # exact UX-DR8 hex, rendered inline
+
+
+def test_needs_overwrite_reflects_existing_operator_resolutions(repo, monkeypatch):
+    from webui.process_logic import needs_overwrite
+
+    parsed = parse_info(DATED_XML)
+    monkeypatch.setattr(repo, "has_operator_resolutions", lambda sid: True)
+    assert needs_overwrite(parsed, repo) is True
+    monkeypatch.setattr(repo, "has_operator_resolutions", lambda sid: False)
+    assert needs_overwrite(parsed, repo) is False
 
 
 def test_run_process_end_to_end_persists_to_the_db(repo):
