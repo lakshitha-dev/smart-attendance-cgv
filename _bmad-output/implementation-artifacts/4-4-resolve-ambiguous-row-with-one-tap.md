@@ -1,5 +1,5 @@
 ---
-status: review
+status: done
 epic: 4
 story: '4.4'
 title: Resolve an Ambiguous row with one tap
