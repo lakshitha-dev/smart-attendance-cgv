@@ -104,6 +104,9 @@ pip install -r requirements-web.txt
 streamlit run webui/app.py
 ```
 
+Run it from the project root — Streamlit loads the app theme from
+`.streamlit/` in the working directory.
+
 ## Project layout
 
 ```

@@ -14,16 +14,22 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-st.set_page_config(page_title="SAMS", layout="centered")
+# No page_title here: st.navigation titles each browser tab per page
+# ("Mark today's attendance", …) — a pinned title would flatten them all to
+# one string. layout="wide" + the CSS cap below give the ~1100px content
+# width honestly (centered layout would fight the cap with its own ~46rem).
+st.set_page_config(layout="wide")
 
-# UX-DR1 minimal CSS: content width token, status-chip + row classes for the
-# results list (consumed by Story 4.3), touch-target minimums (UX-DR14).
+# UX-DR1 minimal CSS (DESIGN.md tokens): content max-width ~1100px, 18px page
+# margin, 16px card padding, 10/12/14px radii; status-chip + row classes for
+# the results list (consumed by Story 4.3), touch-target minimums (UX-DR14).
 # Chip colours per UX-DR8 — coloured text/glyph only, no filled backgrounds.
 st.markdown(
     """
     <style>
-    .block-container { max-width: 1100px; }
-    .stButton button { min-height: 52px; }
+    .block-container { max-width: 1100px; margin: 0 auto; padding-left: 18px; padding-right: 18px; }
+    .stButton button { min-height: 52px; border-radius: 12px; }
+    .sams-card { padding: 16px; border-radius: 14px; background: #FFFFFF; }
     .sams-row { padding: 10px 16px; border-radius: 10px; }
     .sams-row:hover { background: #F3F2EE; }
     .sams-chip { font-weight: 600; background: none; }

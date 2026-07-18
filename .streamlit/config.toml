@@ -1,5 +1,12 @@
-# Quiet Clerk theme (UX-DR1, DESIGN.md verbatim). base="light" pins light mode
-# so a browser in dark mode never inverts the palette.
+# Quiet Clerk theme (UX-DR1, DESIGN.md verbatim). base="light" makes light the
+# default so a dark-mode browser doesn't invert the palette on first visit
+# (a user's explicit in-app Dark choice persists via browser storage — that is
+# outside any config's reach). NOTE: Streamlit discovers .streamlit/ from the
+# working directory — launch `streamlit run webui/app.py` FROM THE PROJECT
+# ROOT or the theme silently falls back to defaults.
+[server]
+maxUploadSize = 25  # a phone sheet photo is <15MB; never buffer 200MB defaults
+
 [theme]
 base = "light"
 primaryColor = "#44526A"
