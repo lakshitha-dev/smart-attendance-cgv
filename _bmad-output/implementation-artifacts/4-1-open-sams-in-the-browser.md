@@ -1,5 +1,5 @@
 ---
-status: ready-for-dev
+status: review
 epic: 4
 story: '4.1'
 title: Open SAMS in the browser
@@ -7,6 +7,7 @@ frs: [FR-12]
 uxdrs: [UX-DR1, UX-DR2, UX-DR12]
 owner: M8 (Topic 8 — Web App & Packaging)
 sprint: Week 2, Days 6–7 · 🔒 gated by Story 1.6 green
+baseline_commit: 5fc30e0
 ---
 
 # Story 4.1: Open SAMS in the browser
@@ -45,3 +46,57 @@ So that I can reach my task without anyone explaining the software to me.
 ## Definition of Done
 
 App runs on phone + desktop browser; three pages navigate; theme pinned light; empty states match UX copy; zero engine logic in pages.
+
+## Tasks / Subtasks
+
+(Derived from the ACs — the story file predates the task-section convention.)
+
+- [x] Task 1: .streamlit/config.toml — Quiet Clerk theme verbatim (UX-DR1) + base="light" pin
+- [x] Task 2: Replace the 4.5-era app.py stub (deferred-work item) with an explicit st.navigation router: exactly Process (landing, default) / Lookup / Investigate, no other navigation (UX-DR2); single st.set_page_config; minimal chip/row CSS block (UX-DR1/DR8/DR14 tokens)
+- [x] Task 3: webui/pages/Process.py — landing empty state (UX-DR12 hint verbatim, two labelled file slots per UX-DR3 with quiet slate "Ready" on accept, one full-width primary Process button disabled until both inputs per UX-DR4; processing itself is 4.2's scope)
+- [x] Task 4: Adapt Lookup/Investigate pages to the router (set_page_config moved to app.py; empty-state prompts already verbatim)
+- [x] Task 5: Headless AppTest suite for the shell — theme values, router page set, landing content, per-page empty states, thin-adapter guard (no cv2/numpy/sqlite3 in pages), Voice & Tone no-exclamation guard
+- [x] Task 6: Verify the app serves — streamlit run webui/app.py headless, HTTP 200
+
+## Dev Agent Record
+
+### Implementation Plan
+
+Red-green: tests/test_webui_shell.py written first (4 failed on the missing
+theme/router/landing exactly as expected), then config.toml + Process page +
+router, then green. st.navigation chosen over pages/ auto-discovery so the
+sidebar carries EXACTLY the three sentence-case titles (auto-discovery would
+have shown a fourth "app" entry — the 4.5-era stub's known defect).
+
+### Completion Notes
+
+- Deferred-work item resolved: the 4.5 stub app.py is REPLACED by the router;
+  pages/ auto-discovery is disabled by the explicit st.navigation call, so
+  "no other navigation" holds by construction.
+- The single st.set_page_config now lives in app.py; Lookup/Investigate lost
+  their own calls (duplicate calls error under a router). Pages still run
+  standalone under AppTest.
+- Empty states verified verbatim per UX-DR12 (all three sentences asserted in
+  tests); Process button disabled-until-ready per UX-DR4; slot "Ready" note
+  renders in slate, never Present green (UX-DR8 rule).
+- Full suite: 206 passed (8 new shell tests). Live smoke: streamlit served
+  HTTP 200 headless on :8599 with the venv-installed requirements-web.txt.
+- Known upstream wart acknowledged (streamlit#11797 deep-linking) — not fought,
+  per Dev Notes.
+
+### File List
+
+- .streamlit/config.toml (new)
+- webui/app.py (stub replaced by the st.navigation router)
+- webui/pages/Process.py (new)
+- webui/pages/Lookup.py (set_page_config removed)
+- webui/pages/Investigate.py (set_page_config removed)
+- tests/test_webui_shell.py (new)
+- _bmad-output/implementation-artifacts/4-1-open-sams-in-the-browser.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+
+### Change Log
+
+- 2026-07-18: Story 4.1 implemented — Quiet Clerk theme, three-page router
+  replacing the 4.5 stub, Process landing empty state, 8 shell tests.
+  206/206 suite green; live HTTP 200 smoke.
