@@ -30,7 +30,7 @@ def _validate_iso_date(value: str, source: str) -> str:
 
 
 def parse_info_file(path: str) -> InfoFile:
-    """Parse and validate an Info File against the PRD Appendix A schema."""
+    """Parse and validate an Info File (by path) against the PRD Appendix A schema."""
     file_path = Path(path)
     if not file_path.is_file():
         raise InputError(f"Info File not found: {path}")
@@ -40,6 +40,25 @@ def parse_info_file(path: str) -> InfoFile:
     except ET.ParseError as exc:
         raise InputError(f"Info File is not valid XML: {path}") from exc
 
+    return _build_info_file(root)
+
+
+def parse_info_file_bytes(data: bytes) -> InfoFile:
+    """Parse and validate an Info File from raw bytes (AD-12: the Web UI has no
+    path). Same schema and `InputError` messages as `parse_info_file`, so both
+    frontends reject a bad Info File identically (EXPERIENCE.md)."""
+    if not data:
+        raise InputError("Info File is not valid XML: empty upload")
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError as exc:
+        raise InputError("Info File is not valid XML: uploaded file") from exc
+
+    return _build_info_file(root)
+
+
+def _build_info_file(root: ET.Element) -> InfoFile:
+    """Validate a parsed <subject> tree into an InfoFile (shared by both loaders)."""
     if root.tag != "subject":
         raise InputError(f"Info File root element must be <subject>, found <{root.tag}>")
 
