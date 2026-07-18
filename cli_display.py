@@ -38,7 +38,15 @@ _MISMATCH_VERDICT = (
 if TYPE_CHECKING:  # matplotlib stays a deferred import: sams.py must not pay
     from matplotlib.figure import Figure  # its import cost for a type name.
 
-_gui_disabled = os.environ.get("SAMS_HEADLESS") == "1"
+def _headless_env() -> bool:
+    """Any truthy SAMS_HEADLESS counts ("1"/"true"/"yes") — the engine's
+    visualization module and tests/conftest.py use the same rule; an
+    exact-"1" check here would leave cv2 windows popping under
+    SAMS_HEADLESS=true while matplotlib went headless."""
+    return os.environ.get("SAMS_HEADLESS", "0").lower() not in ("0", "", "false", "no")
+
+
+_gui_disabled = _headless_env()
 
 
 def show_stage_live(stage: StageArtifact) -> None:
@@ -128,7 +136,7 @@ def show_figure(fig: "Figure") -> None:
     import matplotlib.pyplot as plt
 
     try:
-        if _gui_disabled or os.environ.get("SAMS_HEADLESS") == "1":
+        if _gui_disabled or _headless_env():
             return
         try:
             plt.figure(fig.number)  # make the PASSED figure the active one
