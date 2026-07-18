@@ -251,6 +251,37 @@ def test_needs_overwrite_reflects_existing_operator_resolutions(repo, monkeypatc
     assert needs_overwrite(parsed, repo) is False
 
 
+def test_resolve_row_and_undo_round_trip_through_the_db(repo):
+    """Story 4.4 AD-4: resolve marks the row (operator-flagged, survives
+    re-processing); undo restores Ambiguous."""
+    from sams_core.models import StudentRecord
+    from webui.process_logic import resolve_row, saved_rows, undo_row
+
+    repo.upsert_students([StudentRecord(no="001", index="10000409", title="Mr", name="Alice")])
+    repo.save_attendance(
+        [
+            AttendanceRecord(
+                student_index="10000409",
+                student_name="Alice",
+                sheet_id="2019-05-31",
+                status=AttendanceStatus.AMBIGUOUS,
+                subject_code="CS402.3",
+                subject_name="CG",
+            )
+        ]
+    )
+
+    assert resolve_row("2019-05-31", "10000409", present=True, repository=repo) is True
+    row = saved_rows("2019-05-31", repo)[0]
+    assert row.status is AttendanceStatus.PRESENT
+    assert row.resolved_by_operator is True  # survives re-processing (1.5 rule)
+
+    assert undo_row("2019-05-31", "10000409", repository=repo) is True
+    row = saved_rows("2019-05-31", repo)[0]
+    assert row.status is AttendanceStatus.AMBIGUOUS
+    assert row.resolved_by_operator is False
+
+
 def test_run_process_end_to_end_persists_to_the_db(repo):
     """Real engine call through the seam: a dated 2-student sheet processes,
     reports the resolved Sheet Identifier, AND actually writes rows to the DB
