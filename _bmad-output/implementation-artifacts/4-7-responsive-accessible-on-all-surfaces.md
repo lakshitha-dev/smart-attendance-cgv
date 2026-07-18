@@ -53,7 +53,7 @@ Phone + desktop walkthrough of all three pages recorded (screenshots for the rep
 
 ## Tasks / Subtasks
 
-- [x] Task 1: Cross-frontend parity (FR-15/SM-6) — automated test proving the CLI path (process_sheet with a path) and the Web path (process_logic.run_process with bytes) persist BYTE-IDENTICAL attendance rows for the same sheet, and that Web Lookup reads back what the CLI wrote (both index forms)
+- [x] Task 1: Cross-frontend parity (FR-15/SM-6) — automated test proving the CLI path (process_sheet with a path) and the Web path (process_logic.run_process with bytes) persist IDENTICAL attendance rows (every persisted field compared) for the same sheet, and that Web Lookup reads back what the CLI wrote (both index forms)
 - [x] Task 2: Accessibility-floor guards (UX-DR15) — status chips always icon+label (greyscale-survivable), every input has a visible label, actions are real st.buttons (no HTML onclick), stage images caption "Stage N of 7 — Label"
 - [x] Task 3: Banned-primitives audit (UX-DR14) — no st.balloons/snow/toast/camera_input; resolve/undo are direct buttons (no confirm dialog for reversible actions)
 - [ ] Task 4: [Manual/browser] phone (360px) + desktop walkthrough screenshots for the report; greyscale desaturation check; keyboard Tab/Enter pass — REQUIRES a real browser/device, cannot be done headlessly (see hand-off below)
@@ -104,3 +104,20 @@ headless harness structurally cannot drive):
 - 2026-07-18: Story 4.7 — automated parity + accessibility/banned-primitive
   guards (250/250). Visual/responsive/keyboard audits handed off for a browser
   pass (documented, not faked); single-column layout rationale recorded.
+
+### Review Findings (bmad code review 2026-07-18, Sprint-8 — tests-only story)
+
+- [x] [Review][Patch] HIGH: the parity test's output isolation was a NO-OP — artifacts.py binds OUTPUT_DIR by value at import, so monkeypatching config.OUTPUT_DIR left artifact writes hitting the REAL output/ tree (AD-9 breach). Now patches artifacts.OUTPUT_DIR (verified: output/ stays absent after the parity tests) [tests/test_parity.py]
+- [x] [Review][Patch] `_rows()` compared only 3 of 9 record fields, so "identical Attendance Records" was overstated — now compares the full record (dataclasses.astuple), catching a name/subject/session divergence too [tests/test_parity.py]
+- [x] [Review][Patch] The AD-11 divergence case (the one place the two frontends CAN differ — dateless sheet + sheet_id_override) was untested because the sample is dated — added a dateless parity case asserting the Web path uses the operator-entered date (never a filename) and matches the CLI --date path [tests/test_parity.py]
+- [x] [Review][Patch] "web lookup reads back" test called repo.query_attendance directly, not the Web Lookup adapter — now routes through webui.lookup_logic.lookup [tests/test_parity.py]
+- [x] [Review][Patch] Stage-caption guard's regex required only the "Stage N of C" prefix, not the "— <Label>" suffix the AC names, and covered only Process — tightened to require the label and to assert EVERY st.image under webui/ carries a caption (Investigate evidence images included) [tests/test_webui_accessibility.py]
+- [x] [Review][Patch] Input-label guard checked label text but not visibility (label_visibility="collapsed"/"hidden" would slip through) — added a source guard against hidden/collapsed labels [tests/test_webui_accessibility.py]
+- [x] [Review][Patch] onclick guard was a literal substring on pages/ only — broadened to any HTML event handler / javascript: URL across all of webui/ (anchored so it doesn't match Python words like "done =" or the on_stage= kwarg) [tests/test_webui_accessibility.py]
+- [x] [Review][Patch] Parity count hardcoded 6 — now derived from the Info File's roster size; added a skipif guard when sample sheets are absent [tests/test_parity.py]
+- [x] [Review][Patch] "BYTE-IDENTICAL" wording corrected to field-level identity in Task 1 [this file]
+- [x] [Review][Patch] Undisclosed sub-AC now disclosed: Lookup's "valid indices in two columns" (desktop) is NOT implemented — the no-data list is a single comma-joined string. Same Streamlit-columns-don't-stack rationale as the Process case; flagged for the browser reviewer alongside the others.
+- [x] [Review][Dismissed] Chip test guards the STATUS_CHIP dict not the rendering — the rendering (icon+label in the row) is already asserted by test_webui_process; the chart-legend greyscale-survivability is asserted by test_visualization's legend test. The floor is covered across the suite, not only here.
+- [x] [Review][Dismissed] Parity asserts agreement + count, not status correctness — correctness of the statuses is the accuracy gate's job (test_accuracy pins 100% on all five sheets); parity's job is that the two frontends agree, which it now does field-for-field.
+- [x] [Review][Defer] PRE-EXISTING (not 4.7 diff): some Epic-3 tests (evaluate/verification) still write to the REAL output/ tree during the full suite (verification_score_distribution.png, a sheet dir) — same artifacts.OUTPUT_DIR by-value-import gap. Worth a sweep to route every artifact-writing test through an artifacts.OUTPUT_DIR patch. [tests/, sams_core/artifacts.py]
+- [x] [Review][Note] The Auditor confirmed the visual/keyboard/responsive hand-off is honest (no silent skips) and "review" (not "done") is the correct status given the un-automatable ACs.
