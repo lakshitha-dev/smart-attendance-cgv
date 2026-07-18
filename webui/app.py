@@ -175,6 +175,7 @@ st.markdown(
     [data-testid="stFileUploaderDropzone"]:hover { border-color: var(--sams-accent); background: var(--sams-accent-soft); box-shadow: var(--sams-shadow-sm); }
     /* UX-DR14 44px touch floor: uploader Browse buttons + Streamlit nav chrome. */
     [data-testid='stFileUploader'] button, [data-testid='stDownloadButton'] button { min-height: 44px; }
+    [data-testid='stFileUploaderDeleteBtn'] button { min-height: 44px; min-width: 44px; }
     [data-testid='stExpandSidebarButton'] button, [data-testid='stExpandSidebarButton'],
     [data-testid='stMainMenuButton'], [data-testid='stBaseButton-headerNoPadding'] {
         min-height: 44px; min-width: 44px;
