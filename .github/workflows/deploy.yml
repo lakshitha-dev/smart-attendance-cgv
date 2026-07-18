@@ -1,0 +1,30 @@
+name: Deploy to Azure App Service
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # App Service installs from requirements.txt, so fold in the web deps
+      # and use the headless OpenCV build (no libGL on the server image).
+      - name: Prepare server requirements
+        run: |
+          sed -i 's/^opencv-python==/opencv-python-headless==/' requirements.txt
+          grep -v '^-r' requirements-web.txt >> requirements.txt
+          cat requirements.txt
+
+      - name: Package app
+        run: zip -r app.zip . -x '.git/*' '.github/*' 'tests/*' 'docs/*' 'sample_signin-sheets/*'
+
+      - name: Deploy
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: sams-cgv
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
+          package: app.zip
