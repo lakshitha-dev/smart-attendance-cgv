@@ -14,6 +14,7 @@ import pytest
 pytest.importorskip("streamlit.testing.v1")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
+from sams_core.models import StudentRecord  # noqa: E402
 from sams_core.repository import AttendanceRepository  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -239,7 +240,10 @@ def test_process_page_resolve_then_undo_round_trip(page_repo):
     assert page_repo.get_attendance(sheet_id="2019-05-31")[0].status is S.AMBIGUOUS
 
 
-def test_process_page_all_marked_shows_all_done_message(page_repo):
+def test_process_page_clean_sheet_does_not_claim_all_resolved(page_repo):
+    """A sheet that never had an Ambiguous row must NOT show "All done. Every
+    student is marked" — that message is scoped to resolving ambiguity (UX-DR9),
+    not to a clean run the operator never touched."""
     from sams_core.models import AttendanceStatus as S
 
     at = AppTest.from_file(str(PAGE), default_timeout=30)
@@ -247,7 +251,71 @@ def test_process_page_all_marked_shows_all_done_message(page_repo):
     at.run()
 
     assert not at.exception
-    assert any("Every student on this sheet is marked" in s.value for s in at.success)
+    assert not any("Every student on this sheet is marked" in s.value for s in at.success)
+
+
+def test_process_page_scopes_rows_to_this_run_not_the_whole_date(page_repo):
+    """sheet_id is the session date — a second sheet on the same date must NOT
+    pull the first sheet's rows into this result list."""
+    from sams_core.models import AttendanceStatus as S
+
+    # A prior sheet on the SAME date left rows in the DB for other students.
+    page_repo.upsert_students(
+        [StudentRecord(no="099", index="88888888", title="Mr", name="Stale Student")]
+    )
+    page_repo.save_attendance([_rec("88888888", "Stale Student", S.PRESENT)])
+
+    # This run's roster is just Alice.
+    at = AppTest.from_file(str(PAGE), default_timeout=30)
+    _seed_and_inject(at, page_repo, [_rec("10000409", "Alice", S.PRESENT)])
+    at.run()
+
+    assert not at.exception
+    body = _body(at)
+    assert "Alice" in body
+    assert "Stale Student" not in body and "88888888" not in body  # not this run's roster
+    assert "1 student checked." in body  # count reflects THIS run only
+
+
+def test_process_page_every_resolved_row_keeps_an_undo(page_repo):
+    """Resolving a second Ambiguous row must not strip the first's Undo — every
+    operator-resolved row stays undoable while results are on screen."""
+    from sams_core.models import AttendanceStatus as S
+
+    at = AppTest.from_file(str(PAGE), default_timeout=30)
+    _seed_and_inject(
+        at,
+        page_repo,
+        [_rec("10000409", "Alice", S.AMBIGUOUS), _rec("10009301", "Bea", S.AMBIGUOUS)],
+    )
+    at.run()
+
+    next(b for b in at.button if b.key == "present_10000409").click().run()  # resolve Alice
+    next(b for b in at.button if b.key == "absent_10009301").click().run()  # resolve Bea
+
+    assert not at.exception
+    # Both resolved rows expose an Undo (single-slot notice would have dropped Alice's).
+    undo_keys = {b.key for b in at.button if b.key and b.key.startswith("undo_")}
+    assert undo_keys == {"undo_10000409", "undo_10009301"}
+
+
+def test_process_page_resolve_then_reprocess_triggers_overwrite_gate(page_repo):
+    """DoD: a resolution makes a later re-process hit the 4.2 overwrite gate."""
+    from sams_core.models import AttendanceStatus as S
+    from webui.process_logic import needs_overwrite, parse_info, resolve_row
+
+    page_repo.upsert_students(
+        [StudentRecord(no="001", index="10000409", title="Mr", name="Alice")]
+    )
+    page_repo.save_attendance([_rec("10000409", "Alice", S.AMBIGUOUS)])
+    resolve_row("2019-05-31", "10000409", present=True, repository=page_repo)
+
+    parsed = parse_info(
+        b'<subject code="C" name="N"><session date="2019-05-31"/>'
+        b'<students><student no="001" index="10000409" title="Mr" name="Alice"/>'
+        b"</students></subject>"
+    )
+    assert needs_overwrite(parsed, page_repo) is True
 
 
 def test_process_page_error_outcome_surfaces_catalog_copy(page_repo):
