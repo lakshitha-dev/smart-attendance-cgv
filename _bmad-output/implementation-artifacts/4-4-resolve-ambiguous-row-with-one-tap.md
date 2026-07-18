@@ -1,5 +1,5 @@
 ---
-status: ready-for-dev
+status: review
 epic: 4
 story: '4.4'
 title: Resolve an Ambiguous row with one tap
@@ -7,6 +7,7 @@ frs: [FR-13]
 uxdrs: [UX-DR9, UX-DR12]
 owner: M1 (Topic 1 — resolve flow)
 sprint: Week 2, Day 8 · 🔒 gated
+baseline_commit: 351ba3e
 ---
 
 # Story 4.4: Resolve an Ambiguous row with one tap
@@ -47,3 +48,52 @@ So that I settle uncertain rows in seconds while holding the paper sheet.
 ## Definition of Done
 
 Tap → instant flip + Undo works both directions; DB verified after each transition; re-processing after a resolution triggers the 4.2 overwrite warning; all-resolved message appears.
+
+## Tasks / Subtasks
+
+- [x] Task 1: process_logic resolve helpers — saved_rows (DB-backed row list, UX-DR7), resolve_row (AD-4 resolve, operator-flagged), undo_row (restore Ambiguous); UX-DR9 copy + colour constants
+- [x] Task 2: Results renderer reads SAVED DB state so a resolution flips its row (was rendering the stale detected records)
+- [x] Task 3: Ambiguous row — straw fill #FDFBF2 / ochre border #E3D9B4, the verbatim question, two NEUTRAL-outlined ✓ Present / ✕ Absent buttons; one tap resolves instantly (no confirm) and reruns
+- [x] Task 4: Inline "Saved as X. Undo" on-page text (UX-DR15) after a resolution; Undo restores Ambiguous; notice cleared on next interaction / input change / fresh run
+- [x] Task 5: "All done. Every student on this sheet is marked." when no Ambiguous rows remain
+- [x] Task 6: Tests — resolve/undo DB round-trip (pure) + AppTest button-driven resolve→flip→undo, ambiguous-row rendering, all-marked message
+
+## Dev Agent Record
+
+### Completion Notes
+
+- Rows now render from repository.get_attendance(sheet_id) (UX-DR7 "rows reflect
+  saved DB state"), so tapping ✓/✕ flips the row on the rerun — verified by an
+  AppTest that clicks the real button and asserts the DB status changed both ways.
+- resolve() marks resolved_by_operator (AD-4), so 1.5's survival rule protects
+  the resolution from re-processing and Story 4.2's overwrite gate fires on a
+  later run — the corridor closes.
+- Resolve is the one instant action (no confirm dialog, Interaction Primitives)
+  and carries Undo; the "Saved as X." notice is on-page TEXT (UX-DR15), shown
+  until the next interaction (single build-time behaviour, no colour/motion-only
+  signal).
+- Resolve buttons are neutral (default secondary outline); the ✓/✕ glyph + word
+  carry meaning, button chrome takes no status colour (DESIGN.md).
+- The 4.2 fence holds: resolving reruns the script but process_clicked is False,
+  so nothing re-processes; the strip re-renders collapsed from disk.
+- **Latent bug fixed in passing:** the committed 4.3 Process page referenced
+  `AttendanceRepository()` in the process-click path but never imported it — a
+  NameError that only fires on a real upload (headless AppTest can't upload, so
+  it never surfaced). Now imported; pyflakes confirms no other undefined names.
+- Full suite 238 passed (+4); live streamlit HTTP 200.
+
+### File List
+
+- webui/process_logic.py (saved_rows/resolve_row/undo_row + UX-DR9 constants)
+- webui/pages/Process.py (DB-backed results, Ambiguous resolve rows, undo notice; AttendanceRepository import restored)
+- tests/test_process_logic.py (resolve/undo DB round-trip)
+- tests/test_webui_process.py (rewritten to a page_repo fixture; resolve/undo AppTests)
+- _bmad-output/implementation-artifacts/4-4-resolve-ambiguous-row-with-one-tap.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+
+### Change Log
+
+- 2026-07-18: Story 4.4 implemented — DB-backed results list, one-tap Ambiguous
+  resolve with straw/ochre treatment and neutral buttons, inline Saved/Undo,
+  all-marked message. Fixed a latent missing-import in the 4.3 process path.
+  238/238; HTTP 200.
