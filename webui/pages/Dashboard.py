@@ -207,9 +207,11 @@ def _render_overview(data, repository) -> None:
 
 
 def _quick_actions() -> None:
-    """QUICK ACTIONS (SAMS design): four tall left-aligned icon cards, as real
-    router switches (the card body is the button's markdown label; the
-    .st-key-quick_actions CSS in app.py gives the card shape)."""
+    """QUICK ACTIONS: four tall left-aligned icon cards, as real router
+    switches (the card body is the button's markdown label; the
+    .st-key-quick_actions CSS in app.py gives the card shape). Rendered FIRST
+    on the page — marking today's attendance is the system's main function,
+    so its primary card leads before any read-only overview."""
     _overline("QUICK ACTIONS")
     actions = (
         ("▤", "Mark attendance", "Process a new signing sheet", "pages/Process.py", "primary"),
@@ -237,6 +239,7 @@ except Exception:  # AD-6: no raw traceback may reach the browser
     st.error("Something went wrong reading the saved records.")
 
 if data is not None:
+    _quick_actions()
     if data.message:
         st.write(data.message)
     else:
@@ -246,4 +249,3 @@ if data is not None:
             st.error("Something went wrong reading the saved records.")
         except Exception:
             st.error("Something went wrong reading the saved records.")
-    _quick_actions()
