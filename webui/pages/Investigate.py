@@ -66,7 +66,30 @@ def _render_found(result) -> None:
                 )
 
 
-alias = st.text_input("Student number").strip()
+# Keyed so the Dashboard's signature alerts can prefill the student before
+# switching here (SAMS design: alert rows deep-link to this check).
+alias = st.text_input(
+    "Student number", key="investigate_alias", placeholder="e.g. 001 or 10000409"
+).strip()
+
+# Quick pick (SAMS design): one round pill per known student, filling the
+# input on tap. Roster read via resolve_with_roster so an empty install never
+# creates a DB file on disk; the .st-key-quick_pick CSS shapes the pills.
+_roster = ()
+try:
+    _, _, _roster = AttendanceRepository().resolve_with_roster("")
+except Exception:
+    _roster = ()
+if _roster:
+
+    def _pick(value: str) -> None:
+        st.session_state["investigate_alias"] = value
+
+    options = list(dict.fromkeys((s["no"] or s["student_index"]) for s in _roster))[:12]
+    with st.container(key="quick_pick"):
+        columns = st.columns(max(len(options), 6))
+        for column, option in zip(columns, options):
+            column.button(option, key=f"pick_{option}", on_click=_pick, args=(option,))
 
 if not alias:
     st.write("Type a student's number to check their signature.")

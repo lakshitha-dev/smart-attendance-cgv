@@ -1,9 +1,9 @@
-"""SAMS web entry point (Story 4.1, FR-12/UX-DR1/UX-DR2): the three-page
-shell. `st.navigation` declares EXACTLY Process (landing), Lookup, and
-Investigate — no other navigation, and `pages/` auto-discovery is disabled by
-the explicit router. Theme lives in .streamlit/config.toml (Quiet Clerk,
-light-pinned); this file adds only the minimal chip/row CSS (UX-DR1) and owns
-the single st.set_page_config call."""
+"""SAMS web entry point (Story 4.1 + SAMS.dc.html design, FR-12/UX-DR1/UX-DR2):
+the five-page shell. `st.navigation` declares EXACTLY Dashboard (landing),
+Process, History, Lookup, and Investigate — no other navigation, and `pages/`
+auto-discovery is disabled by the explicit router. Theme lives in
+.streamlit/config.toml (Quiet Clerk, light-pinned); this file adds only the
+minimal chip/row CSS (UX-DR1) and owns the single st.set_page_config call."""
 
 import sys
 from pathlib import Path
@@ -71,7 +71,14 @@ st.markdown(
         background-image: linear-gradient(180deg, #E9ECFF 0%, #F2F1FC 16%, rgba(250, 250, 248, 0) 46%),
                           radial-gradient(1200px 460px at 88% -6%, rgba(99, 102, 241, 0.10), rgba(99, 102, 241, 0) 70%);
         background-attachment: fixed; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-    [data-testid="stHeader"] { background: transparent; box-shadow: none; }
+    /* Sticky translucent header bar (SAMS design): hairline + blur; the
+       session chip content is injected by a second style block below (it
+       carries a value read from the DB, so it cannot live in this literal). */
+    [data-testid="stHeader"] {
+        background: rgba(255, 255, 255, 0.72);
+        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        border-bottom: 1px solid #EFEEE9; box-shadow: none;
+    }
     .stAppDeployButton { display: none; }  /* dev-only chrome, not part of SAMS */
 
     /* ---- Content column ---- */
@@ -95,12 +102,29 @@ st.markdown(
     [data-testid="stSidebarNav"]::before {
         content: "SAMS";
         display: block;
-        padding: 1.15rem 1.1rem 0.9rem;
-        margin: 0 0 0.4rem;
+        padding: 1.15rem 1.1rem 0;
         font-size: 1.05rem; font-weight: 800; letter-spacing: 0.16em;
         background: linear-gradient(90deg, var(--sams-accent) 0%, var(--sams-accent-hi) 100%);
         -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    /* Wordmark subtitle + hairline under the brand block (SAMS design header). */
+    [data-testid="stSidebarNavItems"]::before {
+        content: "Smart Attendance Management";
+        display: block;
+        padding: 3px 1.1rem 0.9rem;
+        margin: 0 0 0.4rem;
+        font-size: 0.72rem; color: var(--sams-ink-muted); letter-spacing: 0.02em;
         border-bottom: 1px solid var(--sams-hairline);
+    }
+    /* Course footer pinned to the sidebar's bottom edge (SAMS design). */
+    [data-testid="stSidebar"]::after {
+        content: "CS402.3 · Computer Graphics\\ANSBM Green University Town";
+        white-space: pre-line;
+        position: absolute; left: 0; right: 0; bottom: 0;
+        padding: 12px 1.1rem 14px;
+        font-size: 0.72rem; line-height: 1.5; color: var(--sams-ink-muted);
+        border-top: 1px solid var(--sams-hairline);
+        background: var(--sams-surface);
     }
     [data-testid="stSidebarNav"] a {
         border-radius: 10px; margin: 2px 8px; padding: 0.5rem 0.75rem;
@@ -150,7 +174,7 @@ st.markdown(
     }
     [data-testid="stFileUploaderDropzone"]:hover { border-color: var(--sams-accent); background: var(--sams-accent-soft); box-shadow: var(--sams-shadow-sm); }
     /* UX-DR14 44px touch floor: uploader Browse buttons + Streamlit nav chrome. */
-    [data-testid='stFileUploader'] button { min-height: 44px; }
+    [data-testid='stFileUploader'] button, [data-testid='stDownloadButton'] button { min-height: 44px; }
     [data-testid='stExpandSidebarButton'] button, [data-testid='stExpandSidebarButton'],
     [data-testid='stMainMenuButton'], [data-testid='stBaseButton-headerNoPadding'] {
         min-height: 44px; min-width: 44px;
@@ -181,6 +205,42 @@ st.markdown(
     .sams-chip-absent { color: #A63D2A; }
     .sams-chip-ambiguous { color: #7A6212; }
 
+    /* ---- File dropzones (SAMS design microcopy + centered column) ---- */
+    [data-testid="stFileUploaderDropzone"] { flex-direction: column; gap: 10px; text-align: center; }
+    [data-testid="stFileUploaderDropzone"] svg { display: none; }  /* no cloud icon in the design */
+    [data-testid="stFileUploaderDropzoneInstructions"] { margin-right: 0; }
+    [data-testid="stFileUploaderDropzoneInstructions"] > div { display: none; }
+    [data-testid="stFileUploaderDropzoneInstructions"]::before {
+        color: var(--sams-ink-muted); font-size: 0.88rem;
+    }
+    .st-key-sheet_slot [data-testid="stFileUploaderDropzoneInstructions"]::before {
+        content: "Tap to take a photo or drop a JPEG / PNG";
+    }
+    .st-key-info_slot [data-testid="stFileUploaderDropzoneInstructions"]::before {
+        content: "Drop the class info.xml here";
+    }
+
+    /* ---- Quick-action cards (Dashboard, SAMS design) ---- */
+    .st-key-quick_actions .stButton button {
+        min-height: 118px; align-items: flex-start; text-align: left; padding: 14px 18px;
+    }
+    .st-key-quick_actions .stButton button > div { text-align: left; width: 100%; }
+    .st-key-quick_actions .stButton button p { line-height: 1.45; }
+
+    /* ---- Quick-pick student pills (Lookup/Investigate, SAMS design) ---- */
+    .st-key-quick_pick .stButton button {
+        border-radius: 99px; min-height: 44px; font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* ---- Expanders nested inside a bordered card (Session history) ---- */
+    [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stExpander"] {
+        border: none; box-shadow: none;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stExpander"]:hover {
+        border: none; box-shadow: none;
+    }
+
     /* ---- Scrollbar ---- */
     *::-webkit-scrollbar { width: 10px; height: 10px; }
     *::-webkit-scrollbar-thumb { background: #DCDAD3; border-radius: 8px; border: 2px solid var(--sams-paper); }
@@ -194,9 +254,45 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+def _session_chip_css() -> str | None:
+    """The header's "● Session · 10 Jul 2019" chip (SAMS design): the latest
+    saved Sheet Identifier, injected as CSS content (the header bar is
+    Streamlit chrome — no widget can render into it). Read-only and fully
+    guarded: no DB, no sessions, or a non-date identifier simply means no chip.
+    """
+    from datetime import date
+
+    from sams_core.repository import AttendanceRepository
+
+    try:
+        repository = AttendanceRepository()
+        if not repository.db_exists:
+            return None
+        sheets = {record.sheet_id for record in repository.get_attendance()}
+        if not sheets:
+            return None
+        latest = date.fromisoformat(max(sheets)).strftime("%d %b %Y")
+    except Exception:
+        return None
+    return (
+        "<style>"
+        '[data-testid="stHeader"]::after {'
+        f' content: "🟢 Session · {latest}";'
+        " position: absolute; right: 24px; top: 50%; transform: translateY(-50%);"
+        " color: #7B818A; font-size: 0.85rem; white-space: nowrap; }"
+        "</style>"
+    )
+
+
+_chip = _session_chip_css()
+if _chip:
+    st.markdown(_chip, unsafe_allow_html=True)
+
 pages = [
-    st.Page("pages/Process.py", title="Mark today's attendance", default=True),
-    st.Page("pages/Lookup.py", title="Look up a student"),
-    st.Page("pages/Investigate.py", title="Check a signature"),
+    st.Page("pages/Dashboard.py", title="Dashboard", default=True, icon=":material/home:"),
+    st.Page("pages/Process.py", title="Mark today's attendance", icon=":material/list_alt:"),
+    st.Page("pages/History.py", title="Session history", icon=":material/grid_on:"),
+    st.Page("pages/Lookup.py", title="Look up a student", icon=":material/schedule:"),
+    st.Page("pages/Investigate.py", title="Check a signature", icon=":material/edit:"),
 ]
 st.navigation(pages).run()

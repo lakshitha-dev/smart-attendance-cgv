@@ -1,8 +1,11 @@
-"""Story 4.1: the three-page Web UI shell (FR-12, UX-DR1/DR2/DR12).
+"""Story 4.1 + SAMS.dc.html design: the five-page Web UI shell (FR-12,
+UX-DR1/DR2/DR12).
 
 Headless AppTest coverage of the router, the Quiet Clerk theme pin, the
 verbatim empty-state microcopy, and the thin-adapter rule (AD-1/AD-8:
-zero engine logic in pages).
+zero engine logic in pages). Router runs point SAMS_DB_PATH at a tmp dir so
+the landing Dashboard never reads (or verifies signatures against) the real
+working DB.
 """
 
 import re
@@ -18,16 +21,33 @@ ROOT = Path(__file__).resolve().parent.parent
 WEBUI = ROOT / "webui"
 
 # UX-DR2: exact sidebar titles, sentence-case, no other navigation.
-PAGE_TITLES = ("Mark today's attendance", "Look up a student", "Check a signature")
+PAGE_TITLES = (
+    "Dashboard",
+    "Mark today's attendance",
+    "Session history",
+    "Look up a student",
+    "Check a signature",
+)
 
-# UX-DR12: verbatim empty-state microcopy.
+# UX-DR12 / SAMS.dc.html: verbatim empty-state microcopy.
+DASHBOARD_PROMPT = "A quick read on the class, then jump straight to what needs doing."
 PROCESS_HINT = "Add the sheet photo and the info file, then tap Process. That's all you need to do."
+HISTORY_PROMPT = "Every signing sheet you've processed, most recent first."
 LOOKUP_PROMPT = "Type a student's number to see their attendance."
 INVESTIGATE_PROMPT = "Type a student's number to check their signature."
 
 
 def _page_test(page: str) -> AppTest:
     return AppTest.from_file(str(WEBUI / "pages" / page), default_timeout=30)
+
+
+def _hermetic(tmp_path, monkeypatch) -> None:
+    """Point the engine at an empty tmp DB for router-level runs (the landing
+    Dashboard reads the DB; the suite must never touch the real one)."""
+    from sams_core import config
+
+    monkeypatch.setenv("SAMS_DB_PATH", str(tmp_path / "sams.db"))
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "sams.db")
 
 
 # --- Theme (UX-DR1) -----------------------------------------------------------
@@ -48,37 +68,45 @@ def test_quiet_clerk_theme_pinned_light():
 # --- Router (UX-DR2) ----------------------------------------------------------
 
 
-def test_app_router_declares_exactly_the_three_pages():
+def test_app_router_declares_exactly_the_five_pages():
     source = (WEBUI / "app.py").read_text(encoding="utf-8")
     for title in PAGE_TITLES:
         assert title in source, f"router missing page title {title!r}"
-    assert source.count("st.Page(") == 3, "exactly three pages — no other navigation (UX-DR2)"
+    assert source.count("st.Page(") == 5, "exactly five pages — no other navigation (UX-DR2)"
     assert "st.navigation" in source
 
 
-def test_app_runs_and_lands_on_process():
+def test_app_runs_and_lands_on_dashboard(tmp_path, monkeypatch):
+    _hermetic(tmp_path, monkeypatch)
     at = AppTest.from_file(str(WEBUI / "app.py"), default_timeout=30).run()
     assert not at.exception
     body = " ".join(el.value for el in at.markdown) + " ".join(h.value for h in at.header)
-    assert PROCESS_HINT in body
+    assert DASHBOARD_PROMPT in body
 
 
 @pytest.mark.parametrize(
     ("page_path", "prompt"),
-    [("pages/Lookup.py", LOOKUP_PROMPT), ("pages/Investigate.py", INVESTIGATE_PROMPT)],
+    [
+        ("pages/Process.py", PROCESS_HINT),
+        ("pages/History.py", HISTORY_PROMPT),
+        ("pages/Lookup.py", LOOKUP_PROMPT),
+        ("pages/Investigate.py", INVESTIGATE_PROMPT),
+    ],
 )
-def test_router_navigates_to_each_non_default_page(page_path, prompt):
+def test_router_navigates_to_each_non_default_page(page_path, prompt, tmp_path, monkeypatch):
     """Drive the non-default pages THROUGH the router — a typoed st.Page path
     or a page-level crash under st.navigation must fail here, not in a demo."""
+    _hermetic(tmp_path, monkeypatch)
     at = AppTest.from_file(str(WEBUI / "app.py"), default_timeout=30).run()
     at.switch_page(page_path).run()
     assert not at.exception
     assert prompt in " ".join(el.value for el in at.markdown)
 
 
-def test_ux_dr1_css_tokens_are_served():
+def test_ux_dr1_css_tokens_are_served(tmp_path, monkeypatch):
     """The chip/row CSS block is real delivery for Story 4.3 — pin its tokens
     so they cannot silently drift or vanish before they are consumed."""
+    _hermetic(tmp_path, monkeypatch)
     at = AppTest.from_file(str(WEBUI / "app.py"), default_timeout=30).run()
     css = " ".join(el.value for el in at.markdown if "<style>" in el.value)
     for token in (
@@ -103,9 +131,13 @@ def test_process_empty_state_two_slots_and_disabled_button():
     assert PROCESS_HINT in body
     labels = [u.label for u in at.get("file_uploader")]
     assert labels == ["Signing Sheet", "Info File"]
-    buttons = at.button
-    assert len(buttons) == 1 and buttons[0].label == "Process"
-    assert buttons[0].disabled is True, "Process must be disabled with empty slots (UX-DR4)"
+    # Exactly the two design actions on an empty page: a disabled Process and
+    # the sample loader (SAMS design) — nothing else.
+    buttons = {b.label: b for b in at.button}
+    assert set(buttons) == {"Process", "Load sample sheet"}
+    assert buttons["Process"].disabled is True, (
+        "Process must be disabled with empty slots (UX-DR4)"
+    )
 
 
 def test_lookup_empty_state_prompt():
