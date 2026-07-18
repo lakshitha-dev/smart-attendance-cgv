@@ -112,6 +112,63 @@ class LookupOutcome(Enum):
     EMPTY_DB = "empty-db"  # no students ingested yet (or no DB file at all)
 
 
+class VerificationOutcome(Enum):
+    """Why signature verification returned what it did (Story 3.2, AD-6/AD-9).
+
+    Like `LookupOutcome`, the no-data shapes are DISTINCT operator situations
+    and must never collapse into one message: an unknown index, a known student
+    with no Reference Signatures, and a known student with no probe crop each
+    call for their own calm copy. Only FOUND carries a comparable score."""
+
+    FOUND = "found"  # references + a probe crop exist; a score was computed
+    NO_REFERENCES = "no-references"  # known student, references/<index>/ empty or missing
+    NO_PROBE = "no-probe"  # known student with references, but no probe crop yet
+    UNKNOWN = "unknown"  # alias resolves to no known student
+    AMBIGUOUS = "ambiguous"  # short ordinal matches more than one student
+    EMPTY_DB = "empty-db"  # no students ingested yet (or no DB file at all)
+
+
+@dataclass(frozen=True)
+class ReferenceScore:
+    """One probe-vs-Reference-Signature comparison (Story 3.2, AD-9).
+
+    `score` is normalized to 0-1 with HIGHER = more similar; any distance metric
+    is inverted inside `verification.py` before it becomes a `ReferenceScore`.
+    `sheet_id` is the reference's source Sheet Identifier (its filename stem),
+    kept so the report can prove the reference/probe split stayed disjoint (SM-4).
+    """
+
+    reference_path: str
+    sheet_id: str | None
+    score: float  # 0-1, higher = more similar
+
+
+@dataclass(frozen=True)
+class VerificationResult:
+    """Typed result of `verification.verify_signature` (Story 3.2, AD-9/AD-6).
+
+    Best-match selection happens INSIDE the engine (the frontends never
+    re-implement match logic): `best` is the highest-scoring `ReferenceScore`
+    and `all_scores` holds every comparison, sorted best-first. `matched` is
+    exactly `best.score >= threshold`. For every no-data `outcome`, `best`/
+    `all_scores` are empty and the no-data carriers (`candidates`,
+    `valid_students`) let adapters render the retry hint without a second call.
+    """
+
+    alias: str
+    outcome: VerificationOutcome
+    student_index: str | None = None
+    student_name: str | None = None
+    probe_path: str | None = None
+    probe_sheet_id: str | None = None
+    best: ReferenceScore | None = None
+    all_scores: tuple[ReferenceScore, ...] = ()
+    matched: bool = False
+    threshold: float = 0.0
+    candidates: tuple[str, ...] = ()  # populated only for AMBIGUOUS
+    valid_students: tuple[dict, ...] = ()  # roster listing for the no-data retry hint
+
+
 @dataclass(frozen=True)
 class AttendanceLookup:
     """Typed result of `repository.query_attendance` (AD-2/AD-6).
