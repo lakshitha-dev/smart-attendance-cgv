@@ -37,6 +37,19 @@ def repo(tmp_path):
     return AttendanceRepository(db_path=tmp_path / "sams.db")
 
 
+@pytest.fixture
+def image_bytes():
+    """Real decodable PNG so run_process's up-front image check passes and the
+    gate/engine logic under test is actually reached."""
+    import cv2
+
+    from tests.test_locate import _synthetic_sheet
+
+    ok, buf = cv2.imencode(".png", _synthetic_sheet())
+    assert ok
+    return buf.tobytes()
+
+
 # --- parse_info ---------------------------------------------------------------
 
 
@@ -70,6 +83,26 @@ def test_parse_info_garbage_maps_to_bad_info_file_copy():
     assert parse_info(b"<subject></subject>").error == BAD_INFO_FILE
 
 
+def test_parse_info_dated_file_with_bad_date_maps_to_date_copy():
+    bad = DATED_XML.replace(b'date="2019-05-31"', b'date="2019-13-45"')
+    parsed = parse_info(bad)
+    assert parsed.sheet_id is None
+    assert "session date" in parsed.error  # BAD_DATE, not "student list"
+
+
+def test_parse_info_rejects_dtd_billion_laughs_without_hanging():
+    """A hostile Info File declaring entities must be refused at the door
+    (engine DTD guard) — never expanded by ElementTree."""
+    bomb = (
+        b'<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol">'
+        b'<!ENTITY lol2 "&lol;&lol;&lol;">]><subject code="C" name="N">'
+        b'<session date="2019-05-31"/><students>'
+        b'<student no="1" index="10000001" title="Mr" name="&lol2;"/>'
+        b"</students></subject>"
+    )
+    assert parse_info(bomb).error == BAD_INFO_FILE
+
+
 # --- run_process: overwrite gate + errors ------------------------------------
 
 
@@ -86,7 +119,7 @@ def _fake_result(sheet_id="2019-05-31", saved=2):
     )
 
 
-def test_run_process_gates_on_existing_operator_resolutions(repo, monkeypatch):
+def test_run_process_gates_on_existing_operator_resolutions(repo, image_bytes, monkeypatch):
     parsed = parse_info(DATED_XML)
     monkeypatch.setattr(repo, "has_operator_resolutions", lambda sid: True)
     called = False
@@ -97,14 +130,14 @@ def test_run_process_gates_on_existing_operator_resolutions(repo, monkeypatch):
 
     monkeypatch.setattr(process_logic, "process_sheet_run", _never)
 
-    outcome = run_process(b"imgbytes", parsed, repo, overwrite_decided=False)
+    outcome = run_process(image_bytes, parsed, repo, overwrite_decided=False)
 
     assert outcome.needs_overwrite_choice is True
     assert outcome.result is None
     assert called is False  # nothing processed until the operator chooses
 
 
-def test_run_process_proceeds_once_the_choice_is_made(repo, monkeypatch):
+def test_run_process_proceeds_once_the_choice_is_made(repo, image_bytes, monkeypatch):
     parsed = parse_info(DATED_XML)
     monkeypatch.setattr(repo, "has_operator_resolutions", lambda sid: True)
     seen = {}
@@ -115,7 +148,7 @@ def test_run_process_proceeds_once_the_choice_is_made(repo, monkeypatch):
     )
 
     outcome = run_process(
-        b"imgbytes", parsed, repo, overwrite=True, overwrite_decided=True
+        image_bytes, parsed, repo, overwrite=True, overwrite_decided=True
     )
 
     assert outcome.needs_overwrite_choice is False
@@ -123,36 +156,67 @@ def test_run_process_proceeds_once_the_choice_is_made(repo, monkeypatch):
     assert seen["overwrite"] is True
 
 
-def test_run_process_maps_bad_image_to_catalog_copy(repo, monkeypatch):
-    from sams_core.errors import InputError
-
+def test_run_process_rejects_undecodable_image_before_touching_the_engine(repo, monkeypatch):
+    """Image is validated up front (no more guessing from an exception
+    message): garbage bytes never reach process_sheet."""
     parsed = parse_info(DATED_XML)
     monkeypatch.setattr(repo, "has_operator_resolutions", lambda sid: False)
+    called = False
 
-    def _boom(*a, **k):
-        raise InputError("Image could not be read (unreadable or corrupt)")
+    def _never(*a, **k):
+        nonlocal called
+        called = True
 
-    monkeypatch.setattr(process_logic, "process_sheet_run", _boom)
+    monkeypatch.setattr(process_logic, "process_sheet_run", _never)
 
-    outcome = run_process(b"garbage", parsed, repo)
-    assert outcome.result is None
+    outcome = run_process(b"not-an-image", parsed, repo)
+    assert "JPEG or PNG" in outcome.error
+    assert called is False
+
+
+def test_run_process_empty_image_is_bad_image_not_a_crash(repo, monkeypatch):
+    parsed = parse_info(DATED_XML)
+    monkeypatch.setattr(repo, "has_operator_resolutions", lambda sid: False)
+    outcome = run_process(b"", parsed, repo)
     assert "JPEG or PNG" in outcome.error
 
 
-def test_run_process_end_to_end_persists_once(repo):
-    """Real engine call through the seam: a dated sheet processes and the
-    result carries the resolved Sheet Identifier."""
+def test_run_process_unexpected_engine_error_is_calm_not_a_traceback(repo, monkeypatch):
+    import cv2
+
+    from tests.test_locate import _synthetic_sheet
+
+    parsed = parse_info(DATED_XML)
+    monkeypatch.setattr(repo, "has_operator_resolutions", lambda sid: False)
+    ok, buf = cv2.imencode(".png", _synthetic_sheet())
+    assert ok
+
+    def _boom(*a, **k):
+        raise RuntimeError("unexpected non-Sams failure")
+
+    monkeypatch.setattr(process_logic, "process_sheet_run", _boom)
+
+    outcome = run_process(buf.tobytes(), parsed, repo)
+    assert outcome.result is None
+    assert outcome.error == process_logic.GENERIC_FAILURE
+
+
+def test_run_process_end_to_end_persists_to_the_db(repo):
+    """Real engine call through the seam: a dated 2-student sheet processes,
+    reports the resolved Sheet Identifier, AND actually writes rows to the DB
+    (proves persistence happened, not just that no exception was raised)."""
     import cv2
 
     from tests.test_locate import _synthetic_sheet
 
     ok, buf = cv2.imencode(".png", _synthetic_sheet())
     assert ok
-    # A 1-student dateless info matching the synthetic sheet's first row.
-    parsed = parse_info(DATED_XML)
+    parsed = parse_info(DATED_XML)  # 2 students, dated 2019-05-31
+
     outcome = run_process(buf.tobytes(), parsed, repo)
-    # The synthetic sheet may classify rows either way; what matters for 4.2 is
-    # the run completed, persisted, and reported the right sheet id — no raise.
+
     assert outcome.error is None
     assert outcome.result is not None
     assert outcome.result.sheet_id == "2019-05-31"
+    saved = repo.get_attendance(sheet_id="2019-05-31")
+    assert {r.student_index for r in saved} == {"10000409", "10009301"}

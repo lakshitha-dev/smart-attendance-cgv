@@ -48,6 +48,7 @@ def test_process_page_renders_stored_outcome_without_reprocessing(tmp_path, monk
     monkeypatch.setattr(pl, "process_sheet_run", lambda *a, **k: calls.append(1))
 
     at = AppTest.from_file(str(PAGE), default_timeout=30)
+    at.session_state["_input_sig"] = (None, None, None)
     at.session_state["process_outcome"] = pl.ProcessOutcome(
         result=SheetResult(
             warnings=[],
@@ -65,7 +66,7 @@ def test_process_page_renders_stored_outcome_without_reprocessing(tmp_path, monk
 
     assert not at.exception
     assert calls == []  # rerun storm: zero re-processing
-    assert any("Saved 6 attendance records" in s.value for s in at.success)
+    assert any("6 students on sheet 2019-05-31" in s.value for s in at.success)
 
 
 def test_process_page_overwrite_gate_shows_two_choices(tmp_path, monkeypatch):
@@ -73,13 +74,17 @@ def test_process_page_overwrite_gate_shows_two_choices(tmp_path, monkeypatch):
     import webui.process_logic as pl
 
     at = AppTest.from_file(str(PAGE), default_timeout=30)
+    at.session_state["_input_sig"] = (None, None, None)
     at.session_state["process_outcome"] = pl.ProcessOutcome(
         needs_overwrite_choice=True, sheet_id="2019-05-31"
     )
+    at.session_state["pending_overwrite"] = {"image": b"x", "parsed": None}
     at.run()
 
     assert not at.exception
-    assert any(pl.OVERWRITE_PROMPT in w.value for w in at.warning)
+    # UX-DR5 modal-style gate (st.dialog): prompt + the two choices render.
+    body = " ".join(m.value for m in at.markdown)
+    assert pl.OVERWRITE_PROMPT in body
     labels = {b.label for b in at.button}
     assert "Keep resolutions" in labels
     assert "Overwrite everything" in labels
@@ -90,6 +95,7 @@ def test_process_page_error_outcome_surfaces_catalog_copy(tmp_path, monkeypatch)
     import webui.process_logic as pl
 
     at = AppTest.from_file(str(PAGE), default_timeout=30)
+    at.session_state["_input_sig"] = (None, None, None)
     at.session_state["process_outcome"] = pl.ProcessOutcome(error=pl.BAD_IMAGE)
     at.run()
 
