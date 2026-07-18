@@ -5,7 +5,9 @@ results row list. ZERO engine logic here (AD-1/AD-8) — `webui/process_logic.py
 sequences the engine calls and owns the copy; this page is widgets +
 session-state fencing + rendering only."""
 
+import csv
 import html
+import io
 import sys
 from pathlib import Path
 
@@ -74,72 +76,130 @@ def _memo(key: str, token, compute):
     return store[key][1]
 
 
-# UX-DR3: two labelled slots.
-sheet_photo = st.file_uploader("Signing Sheet", type=["jpeg", "jpg", "png"])
-st.caption("JPEG or PNG. On iPhone, choose 'Most Compatible' or export the photo as JPEG.")
-_ready_note(sheet_photo)
-
-# UX-DR12 item #1: slot-level image error, before Process (decode-level only).
-image_error = None
-if _slot_ready(sheet_photo):
-    image_error = _memo(
-        "image", sheet_photo.file_id, lambda: check_image(sheet_photo.getvalue())
-    )
-    if image_error:
-        st.error(image_error)
-
-info_file = st.file_uploader("Info File", type=["xml"])
-_ready_note(info_file)
-
-# AD-11: a date field appears ONLY when the uploaded Info File lacks a session
-# date — and the Web UI never falls back to the upload filename.
-session_date = None
-parsed = None
-if _slot_ready(info_file):
-    parsed = _memo(
-        "info", info_file.file_id, lambda: parse_info(info_file.getvalue())
-    )
-    if parsed.error:
-        st.error(parsed.error)
-    elif parsed.needs_date:
-        # Keyed to the file id so a different dateless file never inherits the
-        # previous file's typed date.
-        session_date = st.text_input(
-            "Session date (YYYY-MM-DD)",
-            key=f"session_date_{info_file.file_id}",
-            help="This sheet's info file has no session date, so please enter it.",
-        )
-        parsed = _memo(
-            "info_dated",
-            (info_file.file_id, session_date),
-            lambda: parse_info(info_file.getvalue(), session_date=session_date or None),
-        )
-        if parsed.error:
-            st.error(parsed.error)  # show BAD_DATE for a bad manually-typed date
-
-both_ready = _slot_ready(sheet_photo) and _slot_ready(info_file)
-date_ready = parsed is not None and parsed.sheet_id is not None
-inputs_ok = both_ready and date_ready and image_error is None and parsed.error is None
-
-# Staleness: a stored outcome describes the inputs it ran on. If the inputs
-# changed (new upload, cleared slot, edited date), drop the stale banner/gate
-# so the page never asserts a save for files no longer loaded.
-current_sig = (
-    getattr(sheet_photo, "file_id", None),
-    getattr(info_file, "file_id", None),
-    session_date,
+# The sample inputs (SAMS design "Load sample sheet"): the assignment's own
+# sheet photo + info file shipped at the project root. A slot's uploaded file
+# always wins over the sample; the sample only fills what's empty.
+_SAMPLE_SHEET_PATH = _PROJECT_ROOT / "10.07.2019.png"
+_SAMPLE_INFO_PATH = _PROJECT_ROOT / "info.xml"
+# The sample sheet's session date, an attribute of the shipped asset (its
+# info.xml carries no date). It prefills the visible date field — never a
+# silent filename fallback (AD-11) — and stays editable.
+_SAMPLE_DATE = "2019-07-10"
+sample_on = bool(st.session_state.get("sample_loaded")) and (
+    _SAMPLE_SHEET_PATH.exists() and _SAMPLE_INFO_PATH.exists()
 )
-if st.session_state.get("_input_sig") != current_sig:
-    st.session_state["_input_sig"] = current_sig
-    st.session_state.pop("process_outcome", None)
-    st.session_state.pop("pending_overwrite", None)
-    st.session_state.pop("process_stages", None)  # strip descriptors describe the OLD inputs
-    st.session_state.pop("_overwrite_run", None)
-    st.session_state.pop("resolve_notice", None)
-    st.session_state.pop("resolve_error", None)
 
-# UX-DR4: one full-width primary Process button, disabled until inputs ready.
-process_clicked = st.button("Process", type="primary", width="stretch", disabled=not inputs_ok)
+
+def _sample_note(name: str) -> None:
+    """The sample counterpart of `_ready_note` (same quiet slate treatment)."""
+    st.markdown(
+        f"<span style='color:#44526A;font-weight:600'>✓ Ready</span>"
+        f"<span style='color:{MUTED_INK}'> — {html.escape(name)} (sample)</span>",
+        unsafe_allow_html=True,
+    )
+
+
+# UX-DR3: two labelled slots, side by side in one card (SAMS design). The
+# .st-key-sheet_slot / .st-key-info_slot CSS in app.py carries each dropzone's
+# design microcopy.
+with st.container(border=True, key="upload_card"):
+    sheet_col, info_col = st.columns(2)
+    with sheet_col, st.container(key="sheet_slot"):
+        sheet_photo = st.file_uploader("Signing Sheet", type=["jpeg", "jpg", "png"])
+        st.caption("JPEG or PNG. On iPhone, choose 'Most Compatible' or export the photo as JPEG.")
+        _ready_note(sheet_photo)
+        if not _slot_ready(sheet_photo) and sample_on:
+            _sample_note(_SAMPLE_SHEET_PATH.name)
+    with info_col, st.container(key="info_slot"):
+        info_file = st.file_uploader("Info File", type=["xml"])
+        _ready_note(info_file)
+        if not _slot_ready(info_file) and sample_on:
+            _sample_note(_SAMPLE_INFO_PATH.name)
+
+    # Effective inputs: the uploaded file, else the loaded sample. Tokens key
+    # the memos and the staleness signature below.
+    if _slot_ready(sheet_photo):
+        sheet_bytes, sheet_token = sheet_photo.getvalue(), sheet_photo.file_id
+    elif sample_on:
+        sheet_bytes = _memo("sample_sheet", "sample", _SAMPLE_SHEET_PATH.read_bytes)
+        sheet_token = "sample"
+    else:
+        sheet_bytes, sheet_token = None, None
+    if _slot_ready(info_file):
+        info_bytes, info_token = info_file.getvalue(), info_file.file_id
+    elif sample_on:
+        info_bytes = _memo("sample_info", "sample", _SAMPLE_INFO_PATH.read_bytes)
+        info_token = "sample"
+    else:
+        info_bytes, info_token = None, None
+
+    # UX-DR12 item #1: slot-level image error, before Process (decode-level only).
+    image_error = None
+    if sheet_bytes is not None:
+        image_error = _memo("image", sheet_token, lambda: check_image(sheet_bytes))
+        if image_error:
+            st.error(image_error)
+
+    # AD-11: a date field appears ONLY when the Info File lacks a session
+    # date — and the Web UI never falls back to the upload filename.
+    session_date = None
+    parsed = None
+    if info_bytes is not None:
+        parsed = _memo("info", info_token, lambda: parse_info(info_bytes))
+        if parsed.error:
+            st.error(parsed.error)
+        elif parsed.needs_date:
+            # Keyed to the file token so a different dateless file never
+            # inherits the previous file's typed date.
+            session_date = st.text_input(
+                "Session date (YYYY-MM-DD)",
+                value=_SAMPLE_DATE if info_token == "sample" else "",
+                key=f"session_date_{info_token}",
+                help="This sheet's info file has no session date, so please enter it.",
+            )
+            parsed = _memo(
+                "info_dated",
+                (info_token, session_date),
+                lambda: parse_info(info_bytes, session_date=session_date or None),
+            )
+            if parsed.error:
+                st.error(parsed.error)  # show BAD_DATE for a bad manually-typed date
+
+    both_ready = sheet_bytes is not None and info_bytes is not None
+    date_ready = parsed is not None and parsed.sheet_id is not None
+    inputs_ok = both_ready and date_ready and image_error is None and parsed.error is None
+
+    # Staleness: a stored outcome describes the inputs it ran on. If the inputs
+    # changed (new upload, cleared slot, edited date), drop the stale banner/gate
+    # so the page never asserts a save for files no longer loaded.
+    current_sig = (sheet_token, info_token, session_date)
+    if st.session_state.get("_input_sig") != current_sig:
+        st.session_state["_input_sig"] = current_sig
+        st.session_state.pop("process_outcome", None)
+        st.session_state.pop("pending_overwrite", None)
+        st.session_state.pop("process_stages", None)  # strip descriptors describe the OLD inputs
+        st.session_state.pop("_overwrite_run", None)
+        st.session_state.pop("resolve_notice", None)
+        st.session_state.pop("resolve_error", None)
+        st.session_state.pop("results_search", None)  # a search describes the OLD results
+
+    # UX-DR4: one primary Process button, disabled until inputs ready, with the
+    # sample loader beside it (SAMS design).
+    process_col, sample_col, clear_col = st.columns([1.1, 1.7, 4.2])
+    process_clicked = process_col.button(
+        "Process", type="primary", width="stretch", disabled=not inputs_ok
+    )
+    sample_col.button(
+        "Load sample sheet",
+        width="stretch",
+        on_click=lambda: st.session_state.update(sample_loaded=True),
+    )
+    if sample_on:
+        clear_col.button(
+            "Clear sample",
+            type="tertiary",
+            on_click=lambda: st.session_state.pop("sample_loaded", None),
+        )
 
 
 def _overline(text: str) -> None:
@@ -231,6 +291,54 @@ def _row_html(record) -> str:
     )
 
 
+def _stat_chips_html(records) -> str:
+    """The results split as three tinted stat tiles (SAMS.dc.html): Present /
+    Absent / Needs a look counts. These are aggregate tiles, not status chips —
+    UX-DR8's no-fill rule governs per-row chips, and each tile still carries
+    its label, so colour is never the sole signal (UX-DR15)."""
+    counts = {status: 0 for status in AttendanceStatus}
+    for record in records:
+        counts[record.status] += 1
+    tiles = (
+        (counts[AttendanceStatus.PRESENT], "Present", "#F1F7F3", "#CBE3D5", "#256E4C"),
+        (counts[AttendanceStatus.ABSENT], "Absent", "#FBF2F0", "#ECCFC7", "#A63D2A"),
+        (counts[AttendanceStatus.AMBIGUOUS], "Needs a look", "#FDFBF2", "#E3D9B4", "#7A6212"),
+    )
+    body = "".join(
+        f"<div style='flex:1;min-width:120px;background:{fill};border:1px solid {border};"
+        f"border-radius:12px;padding:12px 14px'>"
+        f"<div style='font-size:1.6rem;font-weight:800;color:{ink};line-height:1;"
+        f"font-variant-numeric:tabular-nums'>{count}</div>"
+        f"<div style='color:{ink};font-size:0.82rem;font-weight:600;margin-top:2px'>{label}</div>"
+        "</div>"
+        for count, label, fill, border, ink in tiles
+    )
+    return f"<div style='display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 4px'>{body}</div>"
+
+
+def _csv_text(records, repo) -> str:
+    """The saved rows as CSV (SAMS.dc.html Export): No, StudentIndex, Name,
+    Status — csv.writer quotes hostile names, so a comma or quote in a name
+    can never shift columns."""
+    try:
+        no_by_index = {s["student_index"]: (s["no"] or "") for s in repo.list_students()}
+    except Exception:
+        no_by_index = {}
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(["No", "StudentIndex", "Name", "Status"])
+    for record in records:
+        writer.writerow(
+            [
+                no_by_index.get(record.student_index, ""),
+                record.student_index,
+                record.student_name or "",
+                record.status.value,
+            ]
+        )
+    return buffer.getvalue()
+
+
 def _resolve_and_notify(sheet_id: str, index: str, present: bool, repo) -> None:
     """Resolve one row and rerun. Checks the repository's return — a zero-row
     update (the row vanished) must surface, never a dead tap with no feedback."""
@@ -257,6 +365,17 @@ def _render_ambiguous_row(record, sheet_id: str, repo) -> None:
         f"font-size:0.85em'>{index}</span><br>{AMBIGUOUS_QUESTION}</div>",
         unsafe_allow_html=True,
     )
+    # The evidence itself (SAMS.dc.html): the signature crop the engine read,
+    # so the operator decides from the ink, not from memory. Registered probe
+    # path only (AD-10); a missing registration/file just omits the image.
+    try:
+        crop = repo.get_signature_image(
+            record.student_index, sheet_id, config.SIGNATURE_KIND_PROBE
+        )
+    except Exception:
+        crop = None
+    if crop and Path(crop).exists():
+        st.image(crop, caption=f"Signature from sheet {sheet_id}", width=220)
     columns = st.columns(2)
     for column, (button_label, present) in zip(columns, (("✓ Present", True), ("✕ Absent", False))):
         prefix = "present" if present else "absent"
@@ -312,7 +431,33 @@ def _render_results(result, sheet_id: str) -> None:
     for banner in result_banners(result):  # prominent flags, not failures
         st.warning(banner)
 
-    for record in rows:
+    st.markdown(_stat_chips_html(rows), unsafe_allow_html=True)
+
+    # Search + export (SAMS.dc.html). The filter narrows the RENDERED list
+    # only — counts, the summary, and the all-done banner keep describing the
+    # whole sheet, and the export always carries every row.
+    search_col, export_col = st.columns([3, 1], vertical_alignment="bottom")
+    query = search_col.text_input("Search by name or index", key="results_search").strip()
+    export_col.download_button(
+        "⭳ Export CSV",
+        data=_csv_text(rows, repo),
+        file_name=f"attendance-{sheet_id}.csv",
+        mime="text/csv",
+        width="stretch",
+    )
+
+    lowered = query.lower()
+    shown = [
+        r
+        for r in rows
+        if not lowered
+        or lowered in (r.student_name or "").lower()
+        or lowered in r.student_index
+    ]
+    if query and not shown:
+        st.write(f"No students match “{query}”.")
+
+    for record in shown:
         if record.status is AttendanceStatus.AMBIGUOUS:
             _render_ambiguous_row(record, sheet_id, repo)
         elif record.resolved_by_operator:
@@ -340,7 +485,7 @@ def _settle_after(outcome) -> None:
 # never flashes a strip; the chosen run then streams like any other.
 if process_clicked and inputs_ok:
     st.session_state.pop("resolve_notice", None)  # a fresh run supersedes any resolve notice
-    image_bytes = sheet_photo.getvalue()
+    image_bytes = sheet_bytes
     if needs_overwrite(parsed, AttendanceRepository()):
         st.session_state["pending_overwrite"] = {"image": image_bytes, "parsed": parsed}
         st.session_state["process_outcome"] = None  # no result yet; show the gate

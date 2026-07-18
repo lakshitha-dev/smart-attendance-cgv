@@ -41,6 +41,14 @@ class AttendanceRepository:
         """`db_path` defaults to `config.DB_PATH`; injectable for headless tests."""
         self._db_path = Path(db_path) if db_path is not None else config.DB_PATH
 
+    @property
+    def db_exists(self) -> bool:
+        """True when the Local DB file exists on disk. Read-only surfaces
+        (Dashboard/History) check this BEFORE connecting, because opening a
+        connection creates the file — the same no-file-on-lookup guarantee
+        `query_attendance` gives (AD-4/AD-6)."""
+        return self._db_path.exists()
+
     # --- Connection lifecycle -------------------------------------------------
 
     @contextmanager

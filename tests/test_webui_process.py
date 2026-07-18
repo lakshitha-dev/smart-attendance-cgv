@@ -93,7 +93,9 @@ def test_process_page_empty_state_renders_disabled_button():
     at = AppTest.from_file(str(PAGE), default_timeout=30).run()
     assert not at.exception
     assert "That's all you need to do." in " ".join(m.value for m in at.markdown)
-    assert len(at.button) == 1 and at.button[0].disabled is True
+    buttons = {b.label: b for b in at.button}
+    assert set(buttons) == {"Process", "Load sample sheet"}
+    assert buttons["Process"].disabled is True
 
 
 def test_process_page_has_no_engine_side_effect_on_plain_load(page_repo, monkeypatch):
