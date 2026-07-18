@@ -1,5 +1,5 @@
 ---
-status: review
+status: done
 epic: 4
 story: '4.2'
 title: Upload a sheet and process it with one tap
@@ -107,3 +107,25 @@ session_state for all subsequent reruns to re-render without re-calling.
 - 2026-07-18: Story 4.2 implemented — engine parse_info_file_bytes, process_logic
   orchestration, one-tap fenced Process run with AD-11 date field, UX-DR5
   overwrite gate and UX-DR12 error catalog. 223/223 green; HTTP 200 smoke.
+
+### Review Findings (code review 2026-07-18, Sprint-8)
+
+- [x] [Review][Patch] Overwrite second-click dereferenced live widgets (`sheet_photo.getvalue()`) that Streamlit resets to None across page nav — crashed with AttributeError; the decision also rebound to whatever files were in the slots at click time, so swapping to sheet B mid-gate would overwrite B unwarned — now captures an input SNAPSHOT (`pending_overwrite`) at press time and the gate acts on that [webui/pages/Process.py]
+- [x] [Review][Patch] `process_outcome` never cleared — a stale success/error banner lingered after inputs changed or a page switch — input-signature staleness guard drops the outcome when uploads/date change [webui/pages/Process.py]
+- [x] [Review][Patch] "Keep resolutions" reported "Saved 0 attendance records" (persisted_count excludes preserved rows) — message now reports total = saved + kept, with the kept count called out [webui/pages/Process.py]
+- [x] [Review][Patch] A bad manually-typed date was silently swallowed (button just stayed disabled, BAD_DATE never shown) — the re-parse error now renders under the date field [webui/pages/Process.py]
+- [x] [Review][Patch] `ET.fromstring` on untrusted upload bytes was a billion-laughs / entity-expansion DoS — engine now rejects any DTD/entity declaration before parsing (shared by both parse paths; no defusedxml dependency) [sams_core/info_file.py]
+- [x] [Review][Patch] Error routing by `"image" in str(exc)` substring misdirected non-image failures to the bad-info-file copy — image is now validated up front via `load_image_bytes` (unambiguous BAD_IMAGE, also catches empty bytes); a late engine failure is a calm GENERIC_FAILURE [webui/process_logic.py]
+- [x] [Review][Patch] `parse_info` caught only InputError — a hostile/unexpected doc escaped as a raw traceback; run_process likewise — both now have a defensive `except Exception` → catalog/GENERIC copy (UX-DR12: nothing raw reaches the browser) [webui/process_logic.py]
+- [x] [Review][Patch] `has_operator_resolutions` raising a non-SamsError (locked/corrupt DB) escaped both handlers — the broadened catch now covers it [webui/process_logic.py]
+- [x] [Review][Patch] Image error was page-level/post-Process, not slot-level per UX-DR12 #1 — `check_image` gives a slot-level error under the photo slot and keeps Process disabled [webui/process_logic.py, webui/pages/Process.py]
+- [x] [Review][Patch] Overwrite gate rendered inline, not "modal-style centered on desktop" (UX-DR5) — now an `st.dialog` [webui/pages/Process.py]
+- [x] [Review][Patch] A dated Info File with an impossible date (2019-13-45) reported "couldn't find the student list" — now routed to the date-catalog copy [webui/process_logic.py]
+- [x] [Review][Patch] Missing-date run returned BAD_INFO_FILE instead of BAD_DATE — needs_date fallback fixed [webui/process_logic.py]
+- [x] [Review][Patch] Date field was keyless — a different dateless file inherited the previous file's typed date — keyed to the file id [webui/pages/Process.py]
+- [x] [Review][Patch] `parse_info`/image decode ran on every rerun (twice for dateless files) — memoized by file id [webui/pages/Process.py]
+- [x] [Review][Patch] Unused `field` import; end-to-end test comment contradicted its data (claimed 1 dateless student, used 2 dated) and only asserted "no raise" — import removed, test rewritten to assert real DB persistence [webui/process_logic.py, tests/test_process_logic.py]
+- [x] [Review][Dismissed] No "cancel" on the overwrite gate — UX-DR5 mandates exactly Keep/Overwrite; "Keep resolutions" re-running non-resolved rows is what processing means
+- [x] [Review][Dismissed] has_operator_resolutions check and overwrite run split across two reruns (TOCTOU) — inherent to a single-writer local app; the snapshot binds the inputs, and a concurrent CLI resolve is out of scope
+- [x] [Review][Note] DoD "phone-browser test" is evidenced by AppTest + HTTP 200 smoke, not a real device; responsive/touch verification is Story 4.7's scope
+
