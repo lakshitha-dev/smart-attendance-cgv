@@ -1,5 +1,5 @@
 ---
-status: review
+status: done
 epic: 4
 story: '4.7'
 title: Use SAMS comfortably on phone, desktop, and projector
@@ -56,7 +56,7 @@ Phone + desktop walkthrough of all three pages recorded (screenshots for the rep
 - [x] Task 1: Cross-frontend parity (FR-15/SM-6) — automated test proving the CLI path (process_sheet with a path) and the Web path (process_logic.run_process with bytes) persist IDENTICAL attendance rows (every persisted field compared) for the same sheet, and that Web Lookup reads back what the CLI wrote (both index forms)
 - [x] Task 2: Accessibility-floor guards (UX-DR15) — status chips always icon+label (greyscale-survivable), every input has a visible label, actions are real st.buttons (no HTML onclick), stage images caption "Stage N of 7 — Label"
 - [x] Task 3: Banned-primitives audit (UX-DR14) — no st.balloons/snow/toast/camera_input; resolve/undo are direct buttons (no confirm dialog for reversible actions)
-- [ ] Task 4: [Manual/browser] phone (360px) + desktop walkthrough screenshots for the report; greyscale desaturation check; keyboard Tab/Enter pass — REQUIRES a real browser/device, cannot be done headlessly (see hand-off below)
+- [x] Task 4: REAL-BROWSER walkthrough executed via Playwright Chromium (docs/walkthrough/): phone 360px + desktop 1440px full flows with the real sheet photo + info.xml uploaded and processed in the browser; greyscale desaturation audit; keyboard Tab/Enter pass — see the walkthrough record below
 
 ## Dev Agent Record
 
@@ -121,3 +121,33 @@ headless harness structurally cannot drive):
 - [x] [Review][Dismissed] Parity asserts agreement + count, not status correctness — correctness of the statuses is the accuracy gate's job (test_accuracy pins 100% on all five sheets); parity's job is that the two frontends agree, which it now does field-for-field.
 - [x] [Review][Defer] PRE-EXISTING (not 4.7 diff): some Epic-3 tests (evaluate/verification) still write to the REAL output/ tree during the full suite (verification_score_distribution.png, a sheet dir) — same artifacts.OUTPUT_DIR by-value-import gap. Worth a sweep to route every artifact-writing test through an artifacts.OUTPUT_DIR patch. [tests/, sams_core/artifacts.py]
 - [x] [Review][Note] The Auditor confirmed the visual/keyboard/responsive hand-off is honest (no silent skips) and "review" (not "done") is the correct status given the un-automatable ACs.
+
+### Browser Walkthrough Record (2026-07-18, Playwright Chromium vs the live app)
+
+14/14 automated checks + visual review of the screenshots (docs/walkthrough/,
+reproducible via docs/walkthrough/walkthrough.py against a running app):
+
+- **Full flow, both viewports:** real upload of sample_signin-sheets/1.jpeg +
+  1.xml → slate "✓ Ready" → Process tap → stage strip → "All finished" →
+  results with icon+label chips → "Results saved." exactly once. Desktop
+  1440x900 and phone 360x740 (touch, dpr 2).
+- **No horizontal scroll at 360px** on Process results, Lookup, and
+  Investigate (scrollWidth == innerWidth == 360 on all three).
+- **Touch targets:** initially FAILED at 28px (Streamlit chrome) / 40px
+  (uploader Browse) — fixed with CSS (44px floor on uploader + nav chrome,
+  dev Deploy button hidden); re-run min = 44px. A real finding only a
+  browser could catch.
+- **UX-DR3 violation found and fixed:** the Ready-note filename rendered in
+  Streamlit's code-span GREEN (banned — "never Present green"); now slate +
+  muted-ink HTML with escaping. Verified in the phone-2-ready screenshot.
+- **Greyscale audit PASS:** desaturated results/lookup/investigate shots —
+  legend colour swatches collapse to identical greys but ✓/✕/? icons, labels
+  and y-band position carry every status (UX-DR8 working as designed).
+- **Keyboard pass:** Tab reaches the uploaders and (when enabled) the Process
+  button; the disabled button is correctly skipped; keyboard-only Lookup
+  (focus → type 001 → Enter) renders the chart. Enter-submit verified.
+- Lookup/Investigate render for student 001 with the verdict sentence and the
+  timeline (legend above the data band — the 4.3 fix visibly working).
+
+DoD now fully evidenced: walkthrough screenshots recorded ✓, parity diff
+empty ✓ (test_parity), greyscale ✓, keyboard ✓, no 360px horizontal scroll ✓.

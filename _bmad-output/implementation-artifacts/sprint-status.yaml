@@ -68,12 +68,12 @@ development_status:
   3-2-compare-probe-signature-and-report-verdict: done
   3-3-evaluate-verification-on-protocol-split: done
   epic-3-retrospective: optional
-  epic-4: in-progress
+  epic-4: done
   4-1-open-sams-in-the-browser: done
   4-2-upload-and-process-with-one-tap: done
   4-3-watch-pipeline-and-read-results: done
   4-4-resolve-ambiguous-row-with-one-tap: done
   4-5-look-up-a-student-from-the-browser: done
   4-6-check-a-signature-from-the-browser: done
-  4-7-responsive-accessible-on-all-surfaces: review
+  4-7-responsive-accessible-on-all-surfaces: done
   epic-4-retrospective: optional
