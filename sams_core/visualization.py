@@ -217,3 +217,48 @@ def render_attendance_timeline(records: Sequence[AttendanceRecord]) -> Figure:
     )
     fig.tight_layout(rect=(0, 0.08, 1, 1))
     return fig
+
+
+def render_score_scale(score_0_100: int, threshold_0_100: int, matched: bool) -> Figure:
+    """A 0-100 similarity-score line with the decision threshold marked
+    (UX-DR11, Story 4.6/4.1 review): figure construction lives in the engine's
+    visualization module exactly once (AD-7) — pages only display it. Colour
+    follows the verdict but never carries it alone; the number and the verdict
+    sentence do that too (UX-DR8). Callers own closing the figure."""
+    import matplotlib.pyplot as plt
+
+    colour = (
+        _STATUS_STYLE[AttendanceStatus.PRESENT]["color"]
+        if matched
+        else _STATUS_STYLE[AttendanceStatus.ABSENT]["color"]
+    )
+    fig, ax = plt.subplots(figsize=(8, 1.2))
+    ax.hlines(0, 0, 100, color="#B9B4A6", linewidth=6, zorder=1)
+    ax.axvline(threshold_0_100, color="#33383F", linestyle="--", linewidth=2, zorder=2)
+    ax.annotate(
+        f"Threshold · {threshold_0_100}",
+        (threshold_0_100, 0.6),
+        ha="center",
+        fontsize=9,
+        color="#33383F",
+    )
+    ax.scatter([score_0_100], [0], s=320, color=colour, zorder=3)
+    ax.annotate(
+        str(score_0_100),
+        (score_0_100, 0),
+        ha="center",
+        va="center",
+        color="white",
+        fontsize=10,
+        fontweight="bold",
+        zorder=4,
+    )
+    ax.set_xlim(0, 100)
+    ax.set_ylim(-1, 1.2)
+    ax.set_yticks([])
+    ax.set_xticks([0, 25, 50, 75, 100])
+    ax.set_xlabel("Similarity score (0–100)")
+    for spine in ("left", "right", "top"):
+        ax.spines[spine].set_visible(False)
+    fig.tight_layout()
+    return fig

@@ -22,51 +22,11 @@ import streamlit as st
 
 from sams_core.errors import SamsError
 from sams_core.repository import AttendanceRepository
+from sams_core.visualization import render_score_scale
 from webui.investigate_logic import display_score, investigate, verdict_sentence
 
 # st.set_page_config lives in app.py — the router owns the single call.
 st.title("Check a signature")
-
-
-def _score_scale(score_0_100: int, threshold_0_100: int, matched: bool):
-    """A 0-100 score line with the decision threshold marked (UX-DR11).
-
-    Rendering lives in the adapter (AD-7); the engine's stored score/threshold
-    stay 0-1. Colour follows the verdict but never carries it alone — the number
-    and the verdict sentence do that too (UX-DR8)."""
-    import matplotlib.pyplot as plt
-
-    colour = "#256E4C" if matched else "#A63D2A"
-    fig, ax = plt.subplots(figsize=(8, 1.2))
-    ax.hlines(0, 0, 100, color="#B9B4A6", linewidth=6, zorder=1)
-    ax.axvline(threshold_0_100, color="#33383F", linestyle="--", linewidth=2, zorder=2)
-    ax.annotate(
-        f"Threshold · {threshold_0_100}",
-        (threshold_0_100, 0.6),
-        ha="center",
-        fontsize=9,
-        color="#33383F",
-    )
-    ax.scatter([score_0_100], [0], s=320, color=colour, zorder=3)
-    ax.annotate(
-        str(score_0_100),
-        (score_0_100, 0),
-        ha="center",
-        va="center",
-        color="white",
-        fontsize=10,
-        fontweight="bold",
-        zorder=4,
-    )
-    ax.set_xlim(0, 100)
-    ax.set_ylim(-1, 1.2)
-    ax.set_yticks([])
-    ax.set_xticks([0, 25, 50, 75, 100])
-    ax.set_xlabel("Similarity score (0–100)")
-    for spine in ("left", "right", "top"):
-        ax.spines[spine].set_visible(False)
-    fig.tight_layout()
-    return fig
 
 
 def _render_found(result) -> None:
@@ -79,16 +39,17 @@ def _render_found(result) -> None:
     # Square-corner evidence images (DESIGN.md Shapes): captions double as the
     # accessible description of each crop (UX-DR15).
     with left:
-        st.image(best.reference_path, caption=ref_caption, use_container_width=True)
+        st.image(best.reference_path, caption=ref_caption, width="stretch")
     with right:
-        st.image(result.probe_path, caption=probe_caption, use_container_width=True)
+        st.image(result.probe_path, caption=probe_caption, width="stretch")
 
     score = display_score(best.score)
     threshold = display_score(result.threshold)
-    st.pyplot(_score_scale(score, threshold, result.matched))
+    fig = render_score_scale(score, threshold, result.matched)
+    st.pyplot(fig)
     import matplotlib.pyplot as plt
 
-    plt.close("all")  # long-lived server: never accumulate figures
+    plt.close(fig)  # long-lived server: never accumulate figures
 
     st.subheader(verdict_sentence(result.matched))
     st.caption("Compared against their best-matching Reference Signature.")
@@ -101,7 +62,7 @@ def _render_found(result) -> None:
                 st.image(
                     other.reference_path,
                     caption=f"Reference from sheet {other.sheet_id} — score {display_score(other.score)}",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
 
