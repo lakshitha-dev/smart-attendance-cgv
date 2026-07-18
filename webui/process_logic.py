@@ -37,6 +37,14 @@ __all__ = [
     "needs_overwrite",
     "results_summary",
     "result_banners",
+    "saved_rows",
+    "resolve_row",
+    "undo_row",
+    "HAIRLINE",
+    "AMBIGUOUS_FILL",
+    "AMBIGUOUS_BORDER",
+    "AMBIGUOUS_QUESTION",
+    "ALL_RESOLVED",
 ]
 
 # UX-DR8 status chips: icon + label + colour, ALWAYS all three (greyscale-
@@ -49,6 +57,13 @@ STATUS_CHIP = {
     AttendanceStatus.AMBIGUOUS: ("?", "Ambiguous", "#7A6212"),
 }
 MUTED_INK = "#7B818A"  # DESIGN.md ink-muted: overline + current-stage caption
+HAIRLINE = "#E9E8E3"  # neutral outline for resolve buttons (NO status colour)
+
+# UX-DR9 Ambiguous-row treatment + verbatim copy.
+AMBIGUOUS_FILL = "#FDFBF2"  # pale straw
+AMBIGUOUS_BORDER = "#E3D9B4"  # ochre
+AMBIGUOUS_QUESTION = "We couldn't read this signature clearly. Which is right?"
+ALL_RESOLVED = "All done. Every student on this sheet is marked."
 
 # UX-DR12 error catalog, verbatim.
 BAD_IMAGE = (
@@ -219,3 +234,24 @@ def needs_overwrite(parsed: "ParsedInfo", repository: AttendanceRepository) -> b
     if parsed.sheet_id is None:
         return False
     return repository.has_operator_resolutions(parsed.sheet_id)
+
+
+def saved_rows(sheet_id: str, repository: AttendanceRepository) -> list[AttendanceRecord]:
+    """The sheet's Attendance Records as CURRENTLY persisted (UX-DR7: the row
+    list reflects saved DB state, so an operator resolution flips its row)."""
+    return repository.get_attendance(sheet_id=sheet_id)
+
+
+def resolve_row(
+    sheet_id: str, student_index: str, present: bool, repository: AttendanceRepository
+) -> bool:
+    """Operator resolution of one Ambiguous row (AD-4, Story 4.4). Marks
+    `resolved_by_operator` so 1.5's survival rule protects it from re-processing.
+    Returns whether a row actually matched."""
+    status = AttendanceStatus.PRESENT if present else AttendanceStatus.ABSENT
+    return repository.resolve(sheet_id, student_index, status, by_operator=True)
+
+
+def undo_row(sheet_id: str, student_index: str, repository: AttendanceRepository) -> bool:
+    """Undo an operator resolution: restore Ambiguous and clear the flag (AD-4)."""
+    return repository.undo_resolution(sheet_id, student_index)
