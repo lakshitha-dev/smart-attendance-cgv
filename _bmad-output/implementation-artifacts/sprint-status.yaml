@@ -57,7 +57,7 @@ development_status:
   1-4-classify-each-signature-cell: done
   1-5-persist-attendance-and-report-results: done
   1-6-prove-detection-accuracy-on-all-five-sheets: done
-  1-7-run-everything-on-a-fresh-machine: ready-for-dev
+  1-7-run-everything-on-a-fresh-machine: review
   epic-1-retrospective: optional
   epic-2: in-progress
   2-1-query-attendance-by-either-index-form: done
