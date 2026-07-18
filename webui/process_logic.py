@@ -17,16 +17,38 @@ from sams_core.errors import InputError, SamsError
 from sams_core.image_io import load_image_bytes
 from sams_core.info_file import parse_info_file_bytes, resolve_sheet_identifier
 from sams_core.models import AttendanceRecord, AttendanceStatus, InfoFile, SheetResult
+from sams_core.pipeline import STAGE_COUNT
 from sams_core.repository import AttendanceRepository
 
+__all__ = [
+    "STAGE_COUNT",
+    "STATUS_CHIP",
+    "MUTED_INK",
+    "BAD_IMAGE",
+    "BAD_INFO_FILE",
+    "BAD_DATE",
+    "GENERIC_FAILURE",
+    "OVERWRITE_PROMPT",
+    "ParsedInfo",
+    "ProcessOutcome",
+    "parse_info",
+    "check_image",
+    "run_process",
+    "needs_overwrite",
+    "results_summary",
+    "result_banners",
+]
+
 # UX-DR8 status chips: icon + label + colour, ALWAYS all three (greyscale-
-# survivable). Coloured text/glyph only — no filled backgrounds. Colours are
-# the CSS classes injected by app.py; the icon+label carry meaning without them.
+# survivable). Coloured text/glyph only — no filled backgrounds. The exact hex
+# is carried here so the chip can render its colour INLINE (independent of the
+# app.py CSS classes), which also lets a page render coloured chips standalone.
 STATUS_CHIP = {
-    AttendanceStatus.PRESENT: ("✓", "Present", "sams-chip-present"),
-    AttendanceStatus.ABSENT: ("✕", "Absent", "sams-chip-absent"),
-    AttendanceStatus.AMBIGUOUS: ("?", "Ambiguous", "sams-chip-ambiguous"),
+    AttendanceStatus.PRESENT: ("✓", "Present", "#256E4C"),
+    AttendanceStatus.ABSENT: ("✕", "Absent", "#A63D2A"),
+    AttendanceStatus.AMBIGUOUS: ("?", "Ambiguous", "#7A6212"),
 }
+MUTED_INK = "#7B818A"  # DESIGN.md ink-muted: overline + current-stage caption
 
 # UX-DR12 error catalog, verbatim.
 BAD_IMAGE = (
@@ -182,8 +204,18 @@ def results_summary(records: Sequence[AttendanceRecord]) -> str:
     return line
 
 
-def mismatch_warnings(result: SheetResult) -> list[str]:
-    """The row-count-mismatch flag(s) to surface as a banner ABOVE results
-    (UX-DR12: a prominent flag, not a failure). The engine already phrased
-    these in error-catalog wording."""
+def result_banners(result: SheetResult) -> list[str]:
+    """Non-fatal notices to surface as flag banners ABOVE the results list
+    (UX-DR12: prominent flags, not failures) — the row-count-mismatch line and
+    the preserved-resolutions note the engine records in `warnings`, already in
+    catalog wording."""
     return list(result.warnings)
+
+
+def needs_overwrite(parsed: "ParsedInfo", repository: AttendanceRepository) -> bool:
+    """Pre-flight check (AD-4): does this Sheet Identifier already carry operator
+    resolutions? Lets the page raise the UX-DR5 gate BEFORE it starts streaming,
+    so a sheet awaiting a Keep/Overwrite choice never flashes a processing strip."""
+    if parsed.sheet_id is None:
+        return False
+    return repository.has_operator_resolutions(parsed.sheet_id)
