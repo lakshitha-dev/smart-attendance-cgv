@@ -204,6 +204,39 @@ class AttendanceRepository:
             return candidate, ()  # unknown canonical form passes through
         return None, ()
 
+    def resolve_with_roster(
+        self, alias: str
+    ) -> tuple[str | None, tuple[str, ...], tuple[dict, ...]]:
+        """Resolve `alias` AND return the roster snapshot in ONE connection.
+
+        Returns (canonical_index_or_None, ambiguous_candidates, roster). The
+        roster (list_students shape) lets callers such as `verification.py`
+        build every no-data payload without a second engine call, exactly as
+        `query_attendance` does for attendance (AD-4/AD-6):
+
+        - roster empty            -> the DB has no students (empty-DB shape).
+        - candidates non-empty    -> a short ordinal matched >1 students.
+        - index None (roster set) -> the alias resolves to nobody (unknown).
+        - index set               -> a known student.
+
+        Never raises on an unresolvable alias — resolution is a no-data result,
+        not an error.
+        """
+        if not self._db_path.exists():
+            return None, (), ()
+        with self._connect() as conn:
+            students = [
+                dict(row)
+                for row in conn.execute(
+                    "SELECT student_index, no, title, name FROM students "
+                    "ORDER BY student_index"
+                ).fetchall()
+            ]
+        if not students:
+            return None, (), ()
+        index, candidates = self._resolve_alias(alias, students)
+        return index, candidates, tuple(students)
+
     def query_attendance(self, alias: str) -> AttendanceLookup:
         """The ONE engine query API for CLI/Web Lookup (AD-4, Story 2.1).
 
@@ -530,3 +563,18 @@ class AttendanceRepository:
                 (student_index, sheet_id, kind),
             ).fetchone()
         return row["path"] if row is not None else None
+
+    def get_signature_images(
+        self, student_index: str, kind: str
+    ) -> list[tuple[str, str]]:
+        """All (sheet_id, path) rows for one student + kind, ordered by Sheet
+        Identifier (Story 3.2). Signature verification reads the registered
+        `probe` crops this way and takes the most recent sheet as the probe;
+        an unregistered student yields an empty list (a no-data result, AD-6)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT sheet_id, path FROM signature_images "
+                "WHERE student_index = ? AND kind = ? ORDER BY sheet_id",
+                (student_index, kind),
+            ).fetchall()
+        return [(row["sheet_id"], row["path"]) for row in rows]

@@ -293,8 +293,9 @@ def run_pipeline_with_detection(
     return _stages(), run
 
 
-# Signature-image kind registered for probe crops in the DB (AD-10).
-_PROBE_IMAGE_KIND = "probe"
+# Signature-image kind registered for probe crops in the DB (AD-10). Sourced
+# from config so the pipeline writer and the verification reader never drift.
+_PROBE_IMAGE_KIND = config.SIGNATURE_KIND_PROBE
 
 
 def process_sheet(

@@ -130,3 +130,47 @@ for _odd_constant in ("DENOISE_MEDIAN_KERNEL", "THRESHOLD_BLOCK_SIZE"):
 # of that separation; values are GLOBAL (SM-C1).
 INK_COVERAGE_PRESENT_THRESHOLD = 0.030
 INK_COVERAGE_ABSENT_THRESHOLD = 0.015
+
+# --- Signature verification (Epic 3: Stories 3.1-3.3 + Web 4.6) ---
+# Signature-image kinds registered in the `signature_images` table (AD-4/AD-10:
+# only PATHS, never blobs). Probe crops come from a processed sheet's output
+# (Story 1.4); Reference Signatures are hand-curated on the filesystem (Story
+# 3.1). Both frontends and the pipeline share these names from one place.
+SIGNATURE_KIND_PROBE = "probe"
+SIGNATURE_KIND_REFERENCE = "reference"
+
+# Reference Signatures live on the FILESYSTEM under references/<student_index>/
+# (AD-10), pre-populated by the team from sheets 1-3. Each file is named by the
+# source Sheet Identifier (e.g. references/10009301/2019-05-31.png), so the
+# disjoint reference/probe split (SM-4) is provable straight from the filename.
+REFERENCE_IMAGE_EXTENSIONS = (".png", ".jpeg", ".jpg")
+
+# Comparison method (Story 3.2): HOG descriptor + cosine similarity on
+# size-normalized binary signature crops. HOG summarizes stroke-orientation
+# structure that survives the tiny, low-texture scribbles which defeat raw ORB
+# feature matching on these sheets (PRD FR-10 known risk). The HOG vector is
+# non-negative, so cosine similarity already lands in [0, 1] with higher = more
+# similar (AD-9) — no distance-to-similarity inversion is needed. The full
+# method write-up lives in sams_core/verification.py.
+VERIFY_NORMALIZED_WIDTH = 128  # HOG window width (px) after aspect-preserving fit
+VERIFY_NORMALIZED_HEIGHT = 64  # HOG window height (px)
+VERIFY_HOG_BLOCK_PX = 16  # HOG block size (px)
+VERIFY_HOG_STRIDE_PX = 8  # HOG block stride (px)
+VERIFY_HOG_CELL_PX = 8  # HOG cell size (px)
+VERIFY_HOG_ORIENTATION_BINS = 9  # HOG orientation bins
+# Binarize + despeckle before normalization: crops arrive already near-binary
+# (white paper, dark ink), so a fixed mid-grey cut is enough; connected ink
+# specks below this area (paper texture, grid-mask fragments) are dropped so the
+# ink bounding box tracks the real signature, not noise.
+VERIFY_BINARY_THRESHOLD = 127
+VERIFY_MIN_INK_COMPONENT_AREA_PX = 20
+
+# Decision threshold (AD-9): matched = score >= SIMILARITY_THRESHOLD. Set at the
+# equal-error operating point of the genuine-vs-impostor score distributions on
+# the committed protocol split (references: sheets 1-3; probes: sheets 4-5) —
+# reproduced by tests/test_verification.py, which saves the distribution figure
+# for the report. Separation is modest (AUC ~0.74): classic verification on these
+# short low-texture scribbles is hard, reported honestly per the brief's credit
+# for the attempt. Tune ONLY this constant — investigate.py and the Web
+# Investigate page both read this exact value (no per-frontend thresholds).
+SIMILARITY_THRESHOLD = 0.40
