@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# SAMS runtime outputs (generated per run — not source)
+output/
+*.db
+*.sqlite3
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# bmad / dev tooling
+.claude/
+_bmad-output/
+_bmad/
+CS402.3 Coursework.md
+CS402.3 Coursework.docx
+
+# internal working notes
+IMPLEMENTATION_COMPLETE_*.md
+STORY_*_IMPLEMENTATION.md
+VERIFICATION_*.md
+FINAL_DELIVERY_CHECKLIST.md
+
