@@ -49,16 +49,19 @@ def _slot_ready(uploaded) -> bool:
 
 
 def _ready_note(uploaded) -> None:
-    """Quiet slate "Ready" (UX-DR3: primary slate, never Present green). The
-    filename renders as a code span so markdown metacharacters in real names
-    cannot break the directive."""
+    """Quiet slate "Ready" (UX-DR3: primary slate, NEVER Present green — a
+    markdown code span renders green in Streamlit, caught in the 4.7 browser
+    walkthrough). HTML-escaped, so filename metacharacters cannot inject."""
     if uploaded is None:
         return
     if uploaded.size == 0:
         st.markdown("That file looks empty — please pick it again.")
         return
-    safe_name = uploaded.name.replace("`", "'")
-    st.markdown(f":primary[✓ Ready] — `{safe_name}`")
+    st.markdown(
+        f"<span style='color:#44526A;font-weight:600'>✓ Ready</span>"
+        f"<span style='color:{MUTED_INK}'> — {html.escape(uploaded.name)}</span>",
+        unsafe_allow_html=True,
+    )
 
 
 def _memo(key: str, token, compute):

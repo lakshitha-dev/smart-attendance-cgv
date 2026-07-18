@@ -29,6 +29,14 @@ st.markdown(
     <style>
     .block-container { max-width: 1100px; margin: 0 auto; padding-left: 18px; padding-right: 18px; }
     .stButton button { min-height: 52px; border-radius: 12px; }
+    /* UX-DR14 44px touch floor also covers the uploader Browse buttons and
+       Streamlit's own nav chrome (sidebar toggle, main menu) on phones. */
+    [data-testid='stFileUploader'] button { min-height: 44px; }
+    [data-testid='stExpandSidebarButton'] button, [data-testid='stExpandSidebarButton'],
+    [data-testid='stMainMenuButton'], [data-testid='stBaseButton-headerNoPadding'] {
+        min-height: 44px; min-width: 44px;
+    }
+    .stAppDeployButton { display: none; }  /* dev-only chrome, not part of SAMS */
     .sams-card { padding: 16px; border-radius: 14px; background: #FFFFFF; }
     .sams-row { padding: 10px 16px; border-radius: 10px; }
     .sams-row:hover { background: #F3F2EE; }
