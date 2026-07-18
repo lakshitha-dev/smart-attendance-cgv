@@ -8,6 +8,15 @@ from sams_core.models import InfoFile, Session, StudentRecord
 
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _FILENAME_DATE_RE = re.compile(r"^(\d{1,2})[.\-_](\d{1,2})[.\-_](\d{4})$")
+# A legitimate Info File declares no DTD. Reject one before parsing so a hostile
+# upload (Web UI = untrusted XML surface) can't mount a billion-laughs / entity
+# expansion attack through stdlib ElementTree (no defusedxml dependency needed).
+_DOCTYPE_RE = re.compile(rb"<!DOCTYPE|<!ENTITY")
+
+
+def _reject_dtd(raw: bytes, source: str) -> None:
+    if _DOCTYPE_RE.search(raw):
+        raise InputError(f"Info File must not declare a DTD or entities: {source}")
 
 
 def _get_attr(element: ET.Element, name: str) -> str | None:
@@ -35,6 +44,7 @@ def parse_info_file(path: str) -> InfoFile:
     if not file_path.is_file():
         raise InputError(f"Info File not found: {path}")
 
+    _reject_dtd(file_path.read_bytes(), path)
     try:
         root = ET.parse(file_path).getroot()
     except ET.ParseError as exc:
@@ -49,6 +59,7 @@ def parse_info_file_bytes(data: bytes) -> InfoFile:
     frontends reject a bad Info File identically (EXPERIENCE.md)."""
     if not data:
         raise InputError("Info File is not valid XML: empty upload")
+    _reject_dtd(data, "uploaded file")
     try:
         root = ET.fromstring(data)
     except ET.ParseError as exc:
