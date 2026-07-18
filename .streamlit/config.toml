@@ -1,0 +1,9 @@
+# Quiet Clerk theme (UX-DR1, DESIGN.md verbatim). base="light" pins light mode
+# so a browser in dark mode never inverts the palette.
+[theme]
+base = "light"
+primaryColor = "#44526A"
+backgroundColor = "#FAFAF8"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#33383F"
+font = "sans serif"

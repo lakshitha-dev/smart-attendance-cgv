@@ -24,8 +24,7 @@ from sams_core.errors import SamsError
 from sams_core.repository import AttendanceRepository
 from webui.investigate_logic import display_score, investigate, verdict_sentence
 
-st.set_page_config(page_title="SAMS — Check a signature")
-
+# st.set_page_config lives in app.py — the router owns the single call.
 st.title("Check a signature")
 
 
