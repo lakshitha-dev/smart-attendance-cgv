@@ -1,5 +1,5 @@
 ---
-status: review
+status: done
 epic: 1
 story: '1.7'
 title: Run everything on a fresh machine
