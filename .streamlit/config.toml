@@ -8,9 +8,23 @@
 maxUploadSize = 25  # a phone sheet photo is <15MB; never buffer 200MB defaults
 
 [theme]
+# The six values below are the Quiet Clerk palette, pinned verbatim (asserted by
+# tests/test_webui_shell.py::test_quiet_clerk_theme_pinned_light — do not edit).
 base = "light"
 primaryColor = "#44526A"
 backgroundColor = "#FAFAF8"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#33383F"
 font = "sans serif"
+# Premium refinements (Streamlit 1.4x+ theme keys). These raise the finish
+# without touching the palette above: soft consistent corner radii, hairline
+# borders on every widget, a calm slate for links (no underline), and a
+# comfortable 15px root size (DESIGN.md body spec). Extra keys are additive —
+# they never change the six pinned values the tests guard.
+linkColor = "#4F46E5"
+linkUnderline = false
+borderColor = "#E9E8E3"
+baseRadius = "0.625rem"
+buttonRadius = "0.75rem"
+showWidgetBorder = true
+baseFontSize = 15
