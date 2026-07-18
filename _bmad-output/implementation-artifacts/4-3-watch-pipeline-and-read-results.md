@@ -1,5 +1,5 @@
 ---
-status: ready-for-dev
+status: review
 epic: 4
 story: '4.3'
 title: Watch the pipeline and read the results
@@ -7,6 +7,7 @@ frs: [FR-13]
 uxdrs: [UX-DR6, UX-DR7, UX-DR8, UX-DR12]
 owner: M1 + M3 (stage strip + results list)
 sprint: Week 2, Days 6–7 · 🔒 gated
+baseline_commit: 5575589
 ---
 
 # Story 4.3: Watch the pipeline and read the results
@@ -47,3 +48,48 @@ So that I trust what SAMS did and see who was present at a glance.
 ## Definition of Done
 
 Phone test: stages stream in order, collapse to expanders; results list renders every Student Record with correct chips; row-count-mismatch banner verified with a doctored fixture; "Results saved." appears exactly once.
+
+## Tasks / Subtasks
+
+- [x] Task 1: Streaming stage strip — st.status ("the strip IS the loading state", no indeterminate spinner) fed by the engine's on_stage callback, each StageArtifact rendered via st.image in pipeline order, current stage named in the status label; the "WHAT WE DID WITH YOUR PHOTO" overline (the one uppercase); "All finished — your results are below." on completion
+- [x] Task 2: Strip re-render on reruns — stage descriptors stashed in session_state, collapsed labelled expanders re-rendered from the engine's saved PNGs on disk (no reprocessing, no big ndarrays in session_state)
+- [x] Task 3: Results row list — process_logic.results_summary (UX-DR7 line with Ambiguous call-to-action), STATUS_CHIP map (UX-DR8 icon+label+colour), container rows (name / index caption / right-aligned chip), "Results saved." exactly once
+- [x] Task 4: Row-count-mismatch flag banner above results (UX-DR12: a flag, not a failure)
+- [x] Task 5: Tests — pure results_summary (singular/plural/ambiguous) + STATUS_CHIP coverage; AppTest for the results list (chips, names, indices, summary, saved-once) and the mismatch banner
+
+## Dev Agent Record
+
+### Completion Notes
+
+- Stage streaming uses st.status (auto-collapses on completion) so the strip
+  itself is the loading indicator (UX-DR6) — no separate spinner. Images come
+  solely from the engine's on_stage emission (AD-2 RGB, st.image as-is).
+- The engine already saves each stage to output/<sheet_id>/NN-slug.png, so
+  reruns re-render the strip as collapsed expanders straight from disk — the
+  fence holds (zero reprocessing), and session_state stays light (descriptors
+  only, never 7 full-res arrays).
+- UX-DR8 chips: icon + label ALWAYS together (greyscale-survivable), colour via
+  the app.py CSS classes, no filled backgrounds; a test pins that every status
+  has an icon/label/class and the label matches the canonical status.
+- results_summary handles 1 vs N and the Ambiguous "needs a quick look"
+  call-to-action; "Results saved." is emitted once (engine already persisted).
+- Row-count mismatch surfaces as a warning banner above the list, verbatim from
+  SheetResult.warnings (the engine's UX-catalog wording).
+- Full suite 231 passed (+8); live streamlit HTTP 200.
+- Scope: Ambiguous rows still render as plain rows here — the resolve buttons
+  (UX-DR9) are Story 4.4; the chip container is built to host them.
+
+### File List
+
+- webui/process_logic.py (STATUS_CHIP, results_summary, mismatch_warnings; on_stage already forwarded)
+- webui/pages/Process.py (streaming strip, collapsed re-render, results row list)
+- tests/test_process_logic.py (results_summary + STATUS_CHIP tests)
+- tests/test_webui_process.py (results-list + mismatch-banner AppTests)
+- _bmad-output/implementation-artifacts/4-3-watch-pipeline-and-read-results.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+
+### Change Log
+
+- 2026-07-18: Story 4.3 implemented — streaming st.status stage strip with
+  disk-backed collapsed re-render, UX-DR7 results row list with UX-DR8 chips,
+  summary line, mismatch flag banner, "Results saved." once. 231/231; HTTP 200.
