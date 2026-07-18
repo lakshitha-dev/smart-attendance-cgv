@@ -63,6 +63,36 @@ def test_app_runs_and_lands_on_process():
     assert PROCESS_HINT in body
 
 
+@pytest.mark.parametrize(
+    ("page_path", "prompt"),
+    [("pages/Lookup.py", LOOKUP_PROMPT), ("pages/Investigate.py", INVESTIGATE_PROMPT)],
+)
+def test_router_navigates_to_each_non_default_page(page_path, prompt):
+    """Drive the non-default pages THROUGH the router — a typoed st.Page path
+    or a page-level crash under st.navigation must fail here, not in a demo."""
+    at = AppTest.from_file(str(WEBUI / "app.py"), default_timeout=30).run()
+    at.switch_page(page_path).run()
+    assert not at.exception
+    assert prompt in " ".join(el.value for el in at.markdown)
+
+
+def test_ux_dr1_css_tokens_are_served():
+    """The chip/row CSS block is real delivery for Story 4.3 — pin its tokens
+    so they cannot silently drift or vanish before they are consumed."""
+    at = AppTest.from_file(str(WEBUI / "app.py"), default_timeout=30).run()
+    css = " ".join(el.value for el in at.markdown if "<style>" in el.value)
+    for token in (
+        "max-width: 1100px",
+        "padding: 16px",
+        "min-height: 52px",
+        ".sams-chip-present { color: #256E4C; }",
+        ".sams-chip-absent { color: #A63D2A; }",
+        ".sams-chip-ambiguous { color: #7A6212; }",
+        "background: none",
+    ):
+        assert token in css, f"UX-DR1/DR8 CSS token missing: {token!r}"
+
+
 # --- Empty states (UX-DR12, verbatim) ------------------------------------------
 
 
@@ -104,11 +134,21 @@ def test_pages_never_import_engine_internals():
 
 
 def test_no_exclamation_marks_in_shell_copy():
-    """Voice & Tone: no exclamation marks anywhere in operator-facing copy."""
+    """Voice & Tone: no exclamation marks anywhere in operator-facing copy.
+    AST-based: walks every string constant (multi-line and triple-quoted
+    included), so copy cannot hide from a line regex. CSS/HTML blocks are
+    exempt (not operator copy; '!important' is legitimate there)."""
+    import ast
+
     for source in sorted(WEBUI.rglob("*.py")):
-        for n, line in enumerate(source.read_text(encoding="utf-8").splitlines(), start=1):
-            for literal in re.findall(r"\"([^\"]*)\"|'([^']*)'", line):
-                text = literal[0] or literal[1]
-                assert "!" not in text or text.startswith("!"), (
-                    f"exclamation mark in copy at {source.name}:{n}"
+        if "__pycache__" in source.parts:
+            continue
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                text = node.value
+                if "<style>" in text or "</" in text:
+                    continue
+                assert "!" not in text, (
+                    f"exclamation mark in copy at {source.name}:{node.lineno}: {text[:60]!r}"
                 )
