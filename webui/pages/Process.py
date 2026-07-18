@@ -1,9 +1,9 @@
-"""Process page — the landing (Story 4.1/4.2, FR-12/UX-DR3/DR4/DR5/DR12): two
-labelled file slots, one Process button, and the one-tap processing run fenced
-so Streamlit reruns never re-trigger it. ZERO engine logic here (AD-1/AD-8) —
-`webui/process_logic.py` sequences the engine calls and owns the copy; this
-page is widgets + session-state fencing only. The rich stage strip (UX-DR6)
-and results row list (UX-DR7) arrive in Story 4.3."""
+"""Process page — the landing (Stories 4.1/4.2/4.3, FR-12/FR-13/UX-DR3–8/DR12):
+two labelled file slots, one Process button, the one-tap processing run fenced
+so Streamlit reruns never re-trigger it, the streaming stage strip, and the
+results row list. ZERO engine logic here (AD-1/AD-8) — `webui/process_logic.py`
+sequences the engine calls and owns the copy; this page is widgets +
+session-state fencing + rendering only."""
 
 import sys
 from pathlib import Path
@@ -14,13 +14,20 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
+from sams_core import config
+from sams_core.models import AttendanceStatus
 from sams_core.repository import AttendanceRepository
 from webui.process_logic import (
     OVERWRITE_PROMPT,
+    STATUS_CHIP,
     check_image,
+    mismatch_warnings,
     parse_info,
+    results_summary,
     run_process,
 )
+
+_STAGE_COUNT = 7  # registry size (AD-3); "Stage N of 7" alt text (UX-DR15)
 
 st.title("Mark today's attendance")
 
@@ -115,23 +122,94 @@ if st.session_state.get("_input_sig") != current_sig:
 process_clicked = st.button("Process", type="primary", width="stretch", disabled=not inputs_ok)
 
 
-def _run(overwrite: bool, overwrite_decided: bool, image_bytes, parsed_info):
-    with st.spinner("Reading the sheet…"):
-        return run_process(
-            image_bytes,
-            parsed_info,
-            AttendanceRepository(),
-            overwrite=overwrite,
-            overwrite_decided=overwrite_decided,
-        )
+def _run(overwrite: bool, overwrite_decided: bool, image_bytes, parsed_info, on_stage=None):
+    return run_process(
+        image_bytes,
+        parsed_info,
+        AttendanceRepository(),
+        overwrite=overwrite,
+        overwrite_decided=overwrite_decided,
+        on_stage=on_stage,
+    )
+
+
+def _stream_run(image_bytes, parsed_info, overwrite, overwrite_decided):
+    """Run the engine while streaming each StageArtifact into an st.status
+    strip (UX-DR6: the strip IS the loading state, no indeterminate spinner).
+    Stage descriptors are recorded so later reruns re-render the strip from
+    disk without re-processing. Images come solely from the engine emission
+    (AD-2: RGB, consumed by st.image as-is)."""
+    stages: list[tuple[int, str, str]] = []
+    with st.status("Reading your photo…", expanded=True) as status:
+        st.markdown("###### WHAT WE DID WITH YOUR PHOTO")  # the one uppercase (DESIGN.md)
+
+        def _on_stage(stage) -> None:
+            stages.append((stage.order, stage.slug, stage.label))
+            status.update(label=f"Reading your photo… ({stage.label})")
+            st.image(
+                stage.image,
+                caption=f"Stage {stage.order} of {_STAGE_COUNT} — {stage.label}",
+                width="stretch",
+            )
+
+        outcome = _run(overwrite, overwrite_decided, image_bytes, parsed_info, on_stage=_on_stage)
+        if outcome.result is not None:
+            status.update(label="All finished — your results are below.", state="complete")
+        else:
+            status.update(label="Couldn't finish", state="error")
+    if outcome.result is not None:
+        st.session_state["process_stages"] = (outcome.sheet_id, stages)
+    return outcome
+
+
+def _render_saved_strip() -> None:
+    """Re-render the completed stage strip from disk on reruns (no reprocessing)
+    — each stage collapses into a labelled expander (UX-DR6)."""
+    saved = st.session_state.get("process_stages")
+    if not saved:
+        return
+    sheet_id, stages = saved
+    st.markdown("###### WHAT WE DID WITH YOUR PHOTO")
+    for order, slug, label in stages:
+        png = config.OUTPUT_DIR / str(sheet_id) / f"{order:02d}-{slug}.png"
+        with st.expander(f"Stage {order} of {_STAGE_COUNT} — {label}"):
+            if png.exists():
+                st.image(str(png), caption=f"Stage {order} of {_STAGE_COUNT} — {label}")
+
+
+def _status_chip(status: AttendanceStatus) -> str:
+    icon, label, css = STATUS_CHIP[status]
+    # Right-aligned, coloured text + glyph, no filled background (UX-DR8).
+    return (
+        f"<div style='text-align:right'>"
+        f"<span class='sams-chip {css}'>{icon} {label}</span></div>"
+    )
+
+
+def _render_results(result) -> None:
+    """UX-DR7 results: summary line, one saved notice, a row-count-mismatch
+    flag banner above the list, then a container row per Student Record."""
+    st.subheader("All finished — your results are below.")
+    st.write(results_summary(result.records))
+    st.caption("Results saved.")  # stated exactly once (engine already persisted)
+
+    for warning in mismatch_warnings(result):  # prominent flag, not a failure
+        st.warning(warning)
+
+    for record in result.records:
+        row = st.container()
+        name_col, chip_col = row.columns([3, 2])
+        name_col.markdown(f"**{record.student_name}**")
+        name_col.caption(record.student_index)
+        chip_col.markdown(_status_chip(record.status), unsafe_allow_html=True)
 
 
 # --- Fence: process on the button-press rerun only ---------------------------
 # st.button returns True only on the single rerun following the press, so the
 # engine call happens once per tap; other reruns skip this branch and re-render
-# the stored outcome (AC: zero re-processing).
+# the stored outcome/strip (AC: zero re-processing).
 if process_clicked and inputs_ok:
-    outcome = _run(False, False, sheet_photo.getvalue(), parsed)
+    outcome = _stream_run(sheet_photo.getvalue(), parsed, overwrite=False, overwrite_decided=False)
     if outcome.needs_overwrite_choice:
         # Capture the exact inputs the warning is about, so the operator's
         # later choice acts on THESE files even if the slots change meanwhile.
@@ -168,14 +246,8 @@ if outcome is not None and outcome.needs_overwrite_choice:
 elif outcome is not None and outcome.error:
     st.error(outcome.error)  # inputs stay in their slots for fix-and-retry
 elif outcome is not None and outcome.result is not None:
-    result = outcome.result
-    saved = result.persisted_count if result.persisted_count is not None else len(result.records)
-    kept = result.preserved_count or 0
-    total = saved + kept
-    message = f"Saved attendance for {total} students on sheet {result.sheet_id}."
-    if kept:
-        message += f" {kept} kept from your earlier fixes."
-    st.success(message)
-    for warning in result.warnings:
-        st.warning(warning)
-    st.caption("Look a student up now, or the full results arrive in the next update.")
+    # On a rerun (no fresh click) the live strip is gone — re-render it collapsed
+    # from disk so the settled view is stable and reprocessing never happens.
+    if not process_clicked:
+        _render_saved_strip()
+    _render_results(outcome.result)
