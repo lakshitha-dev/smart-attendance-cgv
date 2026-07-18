@@ -16,7 +16,13 @@ if str(_PROJECT_ROOT) not in sys.path:
 import streamlit as st
 
 from sams_core import config
+from sams_core.models import AttendanceStatus
+from sams_core.repository import AttendanceRepository
 from webui.process_logic import (
+    ALL_RESOLVED,
+    AMBIGUOUS_BORDER,
+    AMBIGUOUS_FILL,
+    AMBIGUOUS_QUESTION,
     MUTED_INK,
     OVERWRITE_PROMPT,
     STAGE_COUNT,
@@ -25,8 +31,11 @@ from webui.process_logic import (
     needs_overwrite,
     parse_info,
     result_banners,
+    resolve_row,
     results_summary,
     run_process,
+    saved_rows,
+    undo_row,
 )
 
 st.title("Mark today's attendance")
@@ -119,6 +128,7 @@ if st.session_state.get("_input_sig") != current_sig:
     st.session_state.pop("pending_overwrite", None)
     st.session_state.pop("process_stages", None)  # strip descriptors describe the OLD inputs
     st.session_state.pop("_overwrite_run", None)
+    st.session_state.pop("resolve_notice", None)
 
 # UX-DR4: one full-width primary Process button, disabled until inputs ready.
 process_clicked = st.button("Process", type="primary", width="stretch", disabled=not inputs_ok)
@@ -213,23 +223,73 @@ def _row_html(record) -> str:
     )
 
 
-def _render_results(result) -> None:
-    """UX-DR7 results: completion line, summary, one saved notice, flag banners
-    above the list, then a container row per Student Record."""
-    if not result.records:
+def _render_ambiguous_row(record, sheet_id: str) -> None:
+    """UX-DR9 Ambiguous row: straw fill + ochre border, a plain question, and
+    two NEUTRAL-outlined resolve buttons (the ✓/✕ glyph + word carry meaning;
+    the button chrome takes no status colour). One tap resolves instantly (no
+    confirm) and reruns so the row re-reads from the DB and flips."""
+    name = html.escape(record.student_name or record.student_index)
+    index = html.escape(record.student_index)
+    st.markdown(
+        f"<div style='background:{AMBIGUOUS_FILL};border:1px solid {AMBIGUOUS_BORDER};"
+        f"border-radius:12px;padding:12px 16px'>"
+        f"<strong>{name}</strong> "
+        f"<span style='color:{MUTED_INK};font-variant-numeric:tabular-nums;"
+        f"font-size:0.85em'>{index}</span><br>{AMBIGUOUS_QUESTION}</div>",
+        unsafe_allow_html=True,
+    )
+    present_col, absent_col = st.columns(2)
+    if present_col.button("✓ Present", key=f"present_{record.student_index}", width="stretch"):
+        resolve_row(sheet_id, record.student_index, present=True, repository=AttendanceRepository())
+        st.session_state["resolve_notice"] = (record.student_index, "Present")
+        st.rerun()
+    if absent_col.button("✕ Absent", key=f"absent_{record.student_index}", width="stretch"):
+        resolve_row(sheet_id, record.student_index, present=False, repository=AttendanceRepository())
+        st.session_state["resolve_notice"] = (record.student_index, "Absent")
+        st.rerun()
+
+
+def _render_resolved_notice(student_index: str, sheet_id: str) -> None:
+    """Inline "Saved as X. Undo" after a resolution — text (UX-DR15), not colour
+    only. Shows until the next interaction; Undo restores Ambiguous."""
+    notice = st.session_state.get("resolve_notice")
+    if not notice or notice[0] != student_index:
+        return
+    _, label = notice
+    notice_col, undo_col = st.columns([3, 1])
+    notice_col.markdown(f":primary[Saved as {label}.]")
+    if undo_col.button("Undo", key=f"undo_{student_index}", width="stretch"):
+        undo_row(sheet_id, student_index, repository=AttendanceRepository())
+        st.session_state.pop("resolve_notice", None)
+        st.rerun()
+
+
+def _render_results(result, sheet_id: str) -> None:
+    """UX-DR7/DR9 results: rows reflect SAVED DB state (so a resolution flips
+    its row). Completion line, summary, one saved notice, flag banners, then a
+    container row per Student Record — Ambiguous rows carry resolve buttons."""
+    rows = saved_rows(sheet_id, AttendanceRepository())
+    if not rows:
         st.info("We finished, but couldn't find any students on that sheet — "
                 "check the photo shows the full signing table, then try again.")
         return
 
     st.subheader("All finished — your results are below.")
-    st.write(results_summary(result.records))
+    st.write(results_summary(rows))
     st.caption("Results saved.")  # stated exactly once (engine already persisted)
 
     for banner in result_banners(result):  # prominent flags, not failures
         st.warning(banner)
 
-    for record in result.records:
-        st.markdown(_row_html(record), unsafe_allow_html=True)
+    for record in rows:
+        if record.status is AttendanceStatus.AMBIGUOUS:
+            _render_ambiguous_row(record, sheet_id)
+        else:
+            st.markdown(_row_html(record), unsafe_allow_html=True)
+            _render_resolved_notice(record.student_index, sheet_id)
+
+    if not any(r.status is AttendanceStatus.AMBIGUOUS for r in rows):
+        st.success(ALL_RESOLVED)
 
 
 def _settle_after(outcome) -> None:
@@ -245,6 +305,7 @@ def _settle_after(outcome) -> None:
 # overwrite gate is checked BEFORE any streaming so a sheet awaiting a choice
 # never flashes a strip; the chosen run then streams like any other.
 if process_clicked and inputs_ok:
+    st.session_state.pop("resolve_notice", None)  # a fresh run supersedes any resolve notice
     image_bytes = sheet_photo.getvalue()
     if needs_overwrite(parsed, AttendanceRepository()):
         st.session_state["pending_overwrite"] = {"image": image_bytes, "parsed": parsed}
@@ -289,4 +350,4 @@ elif outcome is not None and outcome.result is not None:
     # the view is stable and reprocessing never happens.
     if not process_clicked:
         _render_saved_strip()
-    _render_results(outcome.result)
+    _render_results(outcome.result, outcome.sheet_id)
