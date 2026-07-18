@@ -18,7 +18,22 @@ from typing import TYPE_CHECKING
 import cv2
 
 from sams_core import config
-from sams_core.models import AttendanceLookup, AttendanceRecord, LookupOutcome, StageArtifact
+from sams_core.models import (
+    AttendanceLookup,
+    AttendanceRecord,
+    LookupOutcome,
+    StageArtifact,
+    VerificationOutcome,
+    VerificationResult,
+)
+
+# Verdict copy verbatim from EXPERIENCE.md (Investigate panel / UJ-3): plain
+# language, no jargon, identical wording on the CLI and the Web page (FR-14).
+_MATCH_VERDICT = "Match — this looks like their usual signature."
+_MISMATCH_VERDICT = (
+    "Mismatch — this doesn't look like their usual signature. "
+    "Worth checking in person."
+)
 
 if TYPE_CHECKING:  # matplotlib stays a deferred import: sams.py must not pay
     from matplotlib.figure import Figure  # its import cost for a type name.
@@ -131,6 +146,62 @@ def _student_listing(students: list[dict], limit: int = 12) -> str:
     )
     extra = len(students) - limit
     return shown + (f", … and {extra} more" if extra > 0 else "")
+
+
+def display_score(score: float) -> int:
+    """Normalize an engine similarity score (0-1) to the displayed 0-100 scale.
+
+    Display-side only (UX assumption): the stored score and threshold stay 0-1.
+    Both the CLI and the Web page round the same way so the shown numbers match.
+    """
+    return round(score * 100)
+
+
+def print_verification_result(result: VerificationResult) -> None:
+    """Present an `investigate.py` verdict (Story 3.2, AD-7/AD-9).
+
+    On FOUND: the numeric similarity score (0-100), the threshold, and the plain
+    Match/Mismatch sentence — same score and outcome the Web page shows (FR-14).
+    Every no-data outcome gets its own calm copy (AD-6) and exits 0 upstream.
+    """
+    if result.outcome is VerificationOutcome.FOUND:
+        who = result.student_name or result.student_index
+        print(f"Signature check for {who} ({result.student_index}):")
+        print(
+            f"Similarity score: {display_score(result.best.score)} / 100 "
+            f"(threshold {display_score(result.threshold)})"
+        )
+        print(_MATCH_VERDICT if result.matched else _MISMATCH_VERDICT)
+        print(
+            f"Compared against the best of {len(result.all_scores)} "
+            f"Reference Signature(s); probe from sheet {result.probe_sheet_id}."
+        )
+        return
+
+    if result.outcome is VerificationOutcome.EMPTY_DB:
+        print("No students in the Local DB yet. Process a signing sheet first (sams.py).")
+    elif result.outcome is VerificationOutcome.AMBIGUOUS:
+        print(
+            f"'{result.alias}' matches more than one student: "
+            f"{', '.join(result.candidates)}."
+        )
+        print("Use the 8-digit Student Index to pick one.")
+    elif result.outcome is VerificationOutcome.NO_REFERENCES:
+        who = result.student_name or result.student_index
+        print(
+            f"No Reference Signatures on file for {who} ({result.student_index}) — "
+            f"add images to references/{result.student_index}/ first."
+        )
+    elif result.outcome is VerificationOutcome.NO_PROBE:
+        who = result.student_name or result.student_index
+        print(
+            f"No signature to check for {who} ({result.student_index}) yet — "
+            "process a signing sheet they appear on first."
+        )
+    else:  # UNKNOWN
+        print(f"No data found for index '{result.alias}'.")
+        if result.valid_students:
+            print(f"Valid indices: {_student_listing(list(result.valid_students))}")
 
 
 def print_lookup_outcome(lookup: AttendanceLookup) -> None:
