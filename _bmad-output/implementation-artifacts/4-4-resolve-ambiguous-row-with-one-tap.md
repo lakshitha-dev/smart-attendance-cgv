@@ -97,3 +97,24 @@ Tap → instant flip + Undo works both directions; DB verified after each transi
   resolve with straw/ochre treatment and neutral buttons, inline Saved/Undo,
   all-marked message. Fixed a latent missing-import in the 4.3 process path.
   238/238; HTTP 200.
+
+### Review Findings (bmad code review 2026-07-18, Sprint-8 — solo /code-review + 3 layers)
+
+- [x] [Review][Patch] HIGH: results rendered ALL DB rows for the sheet_id (= the session DATE), so a second sheet on the same date merged both classes' rows (inflated count, stale Ambiguous rows with live resolve buttons) — now iterate THIS run's `result.records` and pull each row's live DB status, scoping to the current roster [webui/pages/Process.py]
+- [x] [Review][Patch] Rows sorted by 8-digit index, not roster/detected order — the same result.records iteration restores the physical-sheet order the operator reads down [webui/pages/Process.py]
+- [x] [Review][Patch] Undo was single-slot + transient: resolving a second row erased the first's Undo, and Undo vanished after any non-resolving rerun — now EVERY operator-resolved row carries a persistent Undo (reads resolved_by_operator), so any resolution stays reversible while results are on screen [webui/pages/Process.py]
+- [x] [Review][Patch] A failed resolve (repository.resolve returns False, zero-row match) was a silent dead tap — the row stayed Ambiguous and never showed the notice; now the return is checked and a "couldn't save that" warning surfaces [webui/pages/Process.py, webui/process_logic.py]
+- [x] [Review][Patch] "All done. Every student on this sheet is marked." fired on a clean sheet that never had ambiguity — now gated on `no ambiguous AND any operator-resolved` (UX-DR9's "given all Ambiguous rows resolved") [webui/pages/Process.py]
+- [x] [Review][Patch] `_render_results` had no guard for sheet_id None (would dump the entire DB via get_attendance) — explicit guard added [webui/pages/Process.py]
+- [x] [Review][Patch] Summary (live DB) and banners (frozen run) could describe different snapshots — both now derive from the current roster, so counts and the mismatch banner agree [webui/pages/Process.py]
+- [x] [Review][Patch] resolve/undo return values ignored (solo #1) — folded into the failed-resolve and failed-undo handling above [webui/pages/Process.py]
+- [x] [Review][Patch] Dead HAIRLINE constant (defined/exported, never used) removed [webui/process_logic.py]
+- [x] [Review][Patch] Repeated AttendanceRepository() construction per render — `_render_results` now builds one and threads it to the row renderers [webui/pages/Process.py]
+- [x] [Review][Patch] Dateless Info XML re-parsed every rerun — memoized by (file_id, session_date) [webui/pages/Process.py]
+- [x] [Review][Patch] present/absent resolve blocks duplicated — collapsed to a two-entry loop [webui/pages/Process.py]
+- [x] [Review][Patch] New tests: cross-sheet scoping, every-resolved-row-keeps-Undo (multi-row), resolve→reprocess→overwrite-gate (DoD), clean-sheet-no-all-done [tests/test_webui_process.py]
+- [x] [Review][Dismissed] "~5s auto-hide" Undo window (UX-DR9/Dev Notes) — a server-side 5s timer isn't achievable in pure Streamlit; the persistent-per-row Undo strictly improves reachability over a disappearing window, so no timer constant is needed
+- [x] [Review][Dismissed] undo_resolution hard-codes AMBIGUOUS ("reset to Ambiguous", not "restore previous") — safe in 4.4 because resolve buttons appear only on Ambiguous rows; a true restore-previous would need storing the prior status (repository/1.5 scope)
+- [x] [Review][Defer] Orphan attendance rows persist in the DB when a sheet is re-processed with a different roster on the same date (visible to infovis/lookup, not just this page) — a facet of the already-deferred "Sheet Identifier = bare date" collision item; engine-side persist_run cleanup belongs to a 1.5 correct-course [sams_core/repository.py]
+- [x] [Review][Note] Fence + double-process paths independently verified SAFE by the Blind Hunter (st.button single-True semantics; _settle_after/_overwrite_run cannot double-fire) — no change needed
+
