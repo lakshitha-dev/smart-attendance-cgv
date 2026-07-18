@@ -10,9 +10,10 @@ maps engine `InputError`s to the verbatim UX-DR12 error-catalog copy. No cv2,
 no sqlite, no Streamlit.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from sams_core.errors import InputError, SamsError
+from sams_core.image_io import load_image_bytes
 from sams_core.info_file import parse_info_file_bytes, resolve_sheet_identifier
 from sams_core.models import InfoFile, SheetResult
 from sams_core.repository import AttendanceRepository
@@ -64,7 +65,13 @@ def parse_info(info_bytes: bytes, session_date: str | None = None) -> ParsedInfo
     """
     try:
         info_file = parse_info_file_bytes(info_bytes)
-    except InputError:
+    except InputError as exc:
+        # A dated Info File with an impossible date raises here too — route it
+        # to the date-catalog copy, not "we couldn't find the student list".
+        message = BAD_DATE if "date" in str(exc).lower() else BAD_INFO_FILE
+        return ParsedInfo(error=message)
+    except Exception:
+        # Never let a hostile/malformed document escape as a raw traceback.
         return ParsedInfo(error=BAD_INFO_FILE)
 
     if info_file.session.date:
@@ -79,6 +86,18 @@ def parse_info(info_bytes: bytes, session_date: str | None = None) -> ParsedInfo
     except InputError:
         return ParsedInfo(info_file=info_file, needs_date=True, error=BAD_DATE)
     return ParsedInfo(info_file=info_file, sheet_id=sheet_id, needs_date=True)
+
+
+def check_image(image_bytes: bytes) -> str | None:
+    """Validate the uploaded photo at decode level so the page can show a
+    SLOT-level error before Process (UX-DR12 item #1), reusing the engine's
+    own decoder. Returns catalog copy on failure, else None. Decode-level only:
+    a dim or skewed photo decodes fine and proceeds."""
+    try:
+        load_image_bytes(image_bytes)
+        return None
+    except InputError:
+        return BAD_IMAGE
 
 
 def run_process(
@@ -97,7 +116,15 @@ def run_process(
     to UX-catalog copy; the pipeline itself persists atomically (AD-12).
     """
     if parsed.info_file is None or parsed.sheet_id is None:
-        return ProcessOutcome(error=parsed.error or BAD_INFO_FILE)
+        # sheet_id is None only in the needs-a-date state (info parsed OK).
+        fallback = BAD_DATE if parsed.needs_date else BAD_INFO_FILE
+        return ProcessOutcome(error=parsed.error or fallback)
+
+    # Validate the photo up front so an image failure is unambiguous (no more
+    # guessing from an exception message); also catches an empty upload.
+    image_error = check_image(image_bytes)
+    if image_error:
+        return ProcessOutcome(error=image_error, sheet_id=parsed.sheet_id)
 
     try:
         if not overwrite_decided and repository.has_operator_resolutions(parsed.sheet_id):
@@ -107,11 +134,12 @@ def run_process(
             image_bytes, parsed, repository, overwrite=overwrite, on_stage=on_stage
         )
         return ProcessOutcome(result=result, sheet_id=parsed.sheet_id)
-    except InputError as exc:
-        # Decode-level rejection only: a dim/skewed photo proceeds (UX-DR12).
-        message = BAD_IMAGE if "image" in str(exc).lower() else BAD_INFO_FILE
-        return ProcessOutcome(error=message, sheet_id=parsed.sheet_id)
     except SamsError:
+        # Image + Info File are already validated, so a failure here is a
+        # processing/persistence fault — one calm page-level message (AD-6).
+        return ProcessOutcome(error=GENERIC_FAILURE, sheet_id=parsed.sheet_id)
+    except Exception:
+        # Defensive: nothing raw ever reaches the browser (UX-DR12).
         return ProcessOutcome(error=GENERIC_FAILURE, sheet_id=parsed.sheet_id)
 
 
