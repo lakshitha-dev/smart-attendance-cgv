@@ -69,7 +69,7 @@ development_status:
   3-3-evaluate-verification-on-protocol-split: done
   epic-3-retrospective: optional
   epic-4: in-progress
-  4-1-open-sams-in-the-browser: review
+  4-1-open-sams-in-the-browser: done
   4-2-upload-and-process-with-one-tap: ready-for-dev
   4-3-watch-pipeline-and-read-results: ready-for-dev
   4-4-resolve-ambiguous-row-with-one-tap: ready-for-dev

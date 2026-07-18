@@ -1,5 +1,5 @@
 ---
-status: review
+status: done
 epic: 4
 story: '4.1'
 title: Open SAMS in the browser
@@ -100,3 +100,25 @@ have shown a fourth "app" entry — the 4.5-era stub's known defect).
 - 2026-07-18: Story 4.1 implemented — Quiet Clerk theme, three-page router
   replacing the 4.5 stub, Process landing empty state, 8 shell tests.
   206/206 suite green; live HTTP 200 smoke.
+
+### Review Findings (code review 2026-07-18, Sprint-8)
+
+- [x] [Review][Patch] `_score_scale` built a full matplotlib figure inside the Investigate PAGE, violating this story's "no visualization logic in pages" AC — moved to `sams_core/visualization.render_score_scale` (AD-7: figures live in the engine's chart module exactly once); verdict colours now derive from the one `_STATUS_STYLE` table [webui/pages/Investigate.py:31]
+- [x] [Review][Patch] `use_container_width` is deprecated on the 1.59.1 pin (already removed from some elements in 1.57) — replaced with `width="stretch"` on the Process button and all three Investigate images [webui/pages/Process.py:36, webui/pages/Investigate.py:82]
+- [x] [Review][Patch] Armed Process button was a silent no-op (tap → rerun → nothing) — a click now renders calm interim copy: "Processing arrives in the next update — nothing was saved." [webui/pages/Process.py:47]
+- [x] [Review][Patch] "Ready" note rendered Streamlit-gray, not the spec'd slate, and interpolated the raw filename into the markdown directive (scan[2].png broke rendering) — now `:primary[✓ Ready]` (theme slate) + filename as a code span with backticks stripped [webui/pages/Process.py:19]
+- [x] [Review][Patch] Zero-byte upload showed "Ready" and armed the button — size>0 required; empty file gets "That file looks empty — please pick it again." [webui/pages/Process.py:14]
+- [x] [Review][Patch] iPhone HEIC (the primary phone default) was rejected with only Streamlit's generic error — caption added: JPEG/PNG guidance with the 'Most Compatible' hint [webui/pages/Process.py:33]
+- [x] [Review][Patch] `page_title="SAMS"` flattened every browser tab to one string (regression vs the per-page titles removed from Lookup/Investigate) — dropped; st.navigation now titles each tab per page [webui/app.py:17]
+- [x] [Review][Patch] `.block-container { max-width: 1100px }` fought layout="centered"'s own ~46rem cap via internal-class specificity — layout="wide" + the cap now owns the width honestly; missing UX-DR1 tokens delivered (18px page margins, 16px card padding, 12/14px radii) [webui/app.py:17]
+- [x] [Review][Patch] 200MB default upload limit unconfigured — `[server] maxUploadSize = 25` [.streamlit/config.toml]
+- [x] [Review][Patch] Theme silently vanishes when streamlit is launched from another cwd (.streamlit/ is cwd-discovered) — README run-from-root note + config comment [README.md, .streamlit/config.toml]
+- [x] [Review][Patch] "Browser dark-mode never inverts" overstated — comment softened: base="light" pins the DEFAULT; a user's explicit in-app Dark choice persists via browser storage [.streamlit/config.toml]
+- [x] [Review][Patch] Router's non-default pages were never executed by any test (grep-only assurance) — `at.switch_page` now drives Lookup and Investigate through the router [tests/test_webui_shell.py]
+- [x] [Review][Patch] Chip/row CSS was untested dead weight — CSS-token test pins the UX-DR1/DR8 values until 4.3 consumes them [tests/test_webui_shell.py]
+- [x] [Review][Patch] Voice guard was line-regex with a startswith("!") escape hatch and blind to triple-quoted strings — replaced with an AST walk over every string constant [tests/test_webui_shell.py]
+- [x] [Review][Patch] Dead sys.path shim in Process.py (imports only streamlit); deferred-work ledger stale on both webui items — shim removed, ledger annotated (app.py-stub item RESOLVED; bootstrap item partially addressed) [webui/pages/Process.py, deferred-work.md]
+- [x] [Review][Dismissed] AppTest cannot simulate uploads — the enable-on-ready branch stays manually verified (platform limitation)
+- [x] [Review][Dismissed] Extension-only upload filtering / magic-byte sniffing — decode-level rejection is 4.2's engine-side scope per UX-DR12
+- [x] [Review][Dismissed] No CI runs the suite — out of coursework scope; the fresh-venv protocol is the documented gate
+
