@@ -24,8 +24,7 @@ from sams_core.repository import AttendanceRepository
 from sams_core.visualization import render_attendance_timeline
 from webui.lookup_logic import lookup
 
-st.set_page_config(page_title="SAMS — Look up a student")
-
+# st.set_page_config lives in app.py — the router owns the single call.
 st.title("Look up a student")
 
 alias = st.text_input("Student number").strip()

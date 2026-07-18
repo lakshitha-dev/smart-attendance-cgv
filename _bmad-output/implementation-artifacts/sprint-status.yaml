@@ -50,14 +50,14 @@ tracking_system: file-system
 story_location: '{project-root}/_bmad-output/implementation-artifacts'
 
 development_status:
-  epic-1: in-progress
+  epic-1: done
   1-1-run-sams-with-validated-inputs: done
   1-2-watch-preprocessing-stages-live-and-saved: done
   1-3-locate-student-table-and-signature-cells: done
   1-4-classify-each-signature-cell: done
   1-5-persist-attendance-and-report-results: done
   1-6-prove-detection-accuracy-on-all-five-sheets: done
-  1-7-run-everything-on-a-fresh-machine: ready-for-dev
+  1-7-run-everything-on-a-fresh-machine: done
   epic-1-retrospective: optional
   epic-2: in-progress
   2-1-query-attendance-by-either-index-form: done
@@ -68,12 +68,12 @@ development_status:
   3-2-compare-probe-signature-and-report-verdict: done
   3-3-evaluate-verification-on-protocol-split: done
   epic-3-retrospective: optional
-  epic-4: in-progress
-  4-1-open-sams-in-the-browser: ready-for-dev
-  4-2-upload-and-process-with-one-tap: ready-for-dev
-  4-3-watch-pipeline-and-read-results: ready-for-dev
-  4-4-resolve-ambiguous-row-with-one-tap: ready-for-dev
+  epic-4: done
+  4-1-open-sams-in-the-browser: done
+  4-2-upload-and-process-with-one-tap: done
+  4-3-watch-pipeline-and-read-results: done
+  4-4-resolve-ambiguous-row-with-one-tap: done
   4-5-look-up-a-student-from-the-browser: done
   4-6-check-a-signature-from-the-browser: done
-  4-7-responsive-accessible-on-all-surfaces: ready-for-dev
+  4-7-responsive-accessible-on-all-surfaces: done
   epic-4-retrospective: optional

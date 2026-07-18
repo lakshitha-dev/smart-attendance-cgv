@@ -1,6 +1,9 @@
-"""SAMS web entry point (minimal landing stub for Story 4.5 — the full
-three-page shell + Quiet Clerk theme is Story 4.1's scope, not built here).
-Streamlit auto-discovers `webui/pages/` for sidebar navigation."""
+"""SAMS web entry point (Story 4.1, FR-12/UX-DR1/UX-DR2): the three-page
+shell. `st.navigation` declares EXACTLY Process (landing), Lookup, and
+Investigate — no other navigation, and `pages/` auto-discovery is disabled by
+the explicit router. Theme lives in .streamlit/config.toml (Quiet Clerk,
+light-pinned); this file adds only the minimal chip/row CSS (UX-DR1) and owns
+the single st.set_page_config call."""
 
 import sys
 from pathlib import Path
@@ -11,7 +14,189 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-st.set_page_config(page_title="SAMS")
+# No page_title here: st.navigation titles each browser tab per page
+# ("Mark today's attendance", …) — a pinned title would flatten them all to
+# one string. layout="wide" + the CSS cap below give the ~1100px content
+# width honestly (centered layout would fight the cap with its own ~46rem).
+st.set_page_config(layout="wide")
 
-st.title("SAMS")
-st.write("Use the sidebar to open a page.")
+# Quiet Clerk CSS layer (DESIGN.md tokens, elevated finish). The palette and
+# the six theme values live in .streamlit/config.toml; this block adds the
+# premium finish config can't express — soft shadows, refined type + rhythm,
+# a sidebar wordmark, and smooth micro-interactions — while keeping the exact
+# token substrings the tests pin (max-width: 1100px, padding: 16px,
+# min-height: 52px, the three .sams-chip-* rules, background: none) and the
+# UX-DR14 44px touch floor / hidden dev chrome. Chip colours per UX-DR8:
+# coloured text/glyph only, never a filled background.
+st.markdown(
+    """
+    <style>
+    :root {
+        --sams-paper: #FAFAF8;
+        --sams-surface: #FFFFFF;
+        --sams-primary: #44526A;
+        --sams-primary-strong: #3B4860;
+        --sams-primary-deep: #323D52;
+        --sams-primary-tint: rgba(68, 82, 106, 0.07);
+        --sams-primary-ring: rgba(68, 82, 106, 0.30);
+        /* Vibrant indigo accent — the action colour that carries the UI's colour
+           (button, links, focus, active nav, hovers). Status green/red/ochre
+           stay reserved for attendance statuses. */
+        --sams-accent: #4F46E5;
+        --sams-accent-hi: #6366F1;
+        --sams-accent-strong: #4338CA;
+        --sams-accent-deep: #3730A3;
+        --sams-accent-soft: #EEF1FF;
+        --sams-accent-tint: rgba(79, 70, 229, 0.08);
+        --sams-accent-ring: rgba(79, 70, 229, 0.32);
+        --sams-accent-shadow: 0 2px 6px rgba(79, 70, 229, 0.26), 0 10px 22px rgba(79, 70, 229, 0.20);
+        --sams-ink: #33383F;
+        --sams-ink-muted: #7B818A;
+        --sams-hairline: #E9E8E3;
+        --sams-hairline-strong: #DAD8D1;
+        --sams-row-hover: #F3F2EE;
+        --sams-shadow-xs: 0 1px 2px rgba(28, 33, 40, 0.05);
+        --sams-shadow-sm: 0 1px 2px rgba(28, 33, 40, 0.04), 0 2px 8px rgba(28, 33, 40, 0.05);
+        --sams-shadow-md: 0 2px 6px rgba(28, 33, 40, 0.05), 0 12px 28px rgba(28, 33, 40, 0.07);
+        --sams-shadow-primary: 0 2px 5px rgba(50, 61, 82, 0.22), 0 6px 16px rgba(50, 61, 82, 0.16);
+        --sams-radius-sm: 10px;
+        --sams-radius-md: 12px;
+        --sams-radius-lg: 14px;
+        --sams-ease: cubic-bezier(0.22, 1, 0.36, 1);
+        --sams-dur: 190ms;
+    }
+
+    /* ---- Canvas + page chrome ---- */
+    .stApp { background-color: var(--sams-paper);
+        background-image: linear-gradient(180deg, #E9ECFF 0%, #F2F1FC 16%, rgba(250, 250, 248, 0) 46%),
+                          radial-gradient(1200px 460px at 88% -6%, rgba(99, 102, 241, 0.10), rgba(99, 102, 241, 0) 70%);
+        background-attachment: fixed; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    [data-testid="stHeader"] { background: transparent; box-shadow: none; }
+    .stAppDeployButton { display: none; }  /* dev-only chrome, not part of SAMS */
+
+    /* ---- Content column ---- */
+    .block-container { max-width: 1100px; margin: 0 auto; padding-left: 18px; padding-right: 18px; padding-top: 2.75rem; padding-bottom: 4rem; }
+
+    /* ---- Typography ---- */
+    /* Colour on .stApp only (inherited) — never force it on every <p>, or the
+       colour would leak into widget labels rendered as markdown paragraphs
+       (e.g. the primary button's white label). */
+    .stApp { color: var(--sams-ink); }
+    .stApp p, .stApp li { line-height: 1.62; }
+    .stApp h1 { font-weight: 700; letter-spacing: -0.021em; color: var(--sams-ink); font-size: 2rem; line-height: 1.18; margin-bottom: 0.1rem; }
+    .stApp h2 { font-weight: 650; letter-spacing: -0.013em; font-size: 1.32rem; margin-top: 0.35rem; }
+    .stApp h3 { font-weight: 650; letter-spacing: -0.008em; font-size: 1.08rem; }
+    [data-testid="stCaptionContainer"], .stApp small { color: var(--sams-ink-muted); }
+    .stApp a { color: var(--sams-accent); text-decoration: none; font-weight: 600; }
+    .stApp a:hover { color: var(--sams-accent-strong); text-decoration: underline; }
+
+    /* ---- Sidebar + native navigation ---- */
+    [data-testid="stSidebar"] { background: linear-gradient(180deg, #FBFBFF 0%, var(--sams-surface) 100%); border-right: 1px solid var(--sams-hairline); }
+    [data-testid="stSidebarNav"]::before {
+        content: "SAMS";
+        display: block;
+        padding: 1.15rem 1.1rem 0.9rem;
+        margin: 0 0 0.4rem;
+        font-size: 1.05rem; font-weight: 800; letter-spacing: 0.16em;
+        background: linear-gradient(90deg, var(--sams-accent) 0%, var(--sams-accent-hi) 100%);
+        -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        border-bottom: 1px solid var(--sams-hairline);
+    }
+    [data-testid="stSidebarNav"] a {
+        border-radius: 10px; margin: 2px 8px; padding: 0.5rem 0.75rem;
+        color: var(--sams-ink); font-weight: 500; border-left: 3px solid transparent;
+        transition: background var(--sams-dur) var(--sams-ease), color var(--sams-dur) var(--sams-ease), border-color var(--sams-dur) var(--sams-ease);
+    }
+    [data-testid="stSidebarNav"] a:hover { background: var(--sams-accent-soft); color: var(--sams-accent-strong); }
+    [data-testid="stSidebarNav"] a[aria-current="page"] { background: var(--sams-accent-soft); color: var(--sams-accent-strong); font-weight: 650; border-left-color: var(--sams-accent); }
+
+    /* ---- Buttons ---- */
+    .stButton button { min-height: 52px; border-radius: 12px; font-weight: 600; letter-spacing: 0.005em;
+        transition: transform var(--sams-dur) var(--sams-ease), box-shadow var(--sams-dur) var(--sams-ease), background var(--sams-dur) var(--sams-ease), border-color var(--sams-dur) var(--sams-ease); }
+    [data-testid="stBaseButton-primary"] {
+        background: linear-gradient(180deg, var(--sams-accent-hi) 0%, var(--sams-accent) 100%);
+        border: 1px solid var(--sams-accent-strong); color: #FFFFFF; box-shadow: var(--sams-accent-shadow);
+    }
+    [data-testid="stBaseButton-primary"]:hover:not(:disabled) {
+        background: linear-gradient(180deg, var(--sams-accent) 0%, var(--sams-accent-strong) 100%);
+        transform: translateY(-1px); box-shadow: 0 5px 12px rgba(79, 70, 229, 0.32), 0 14px 28px rgba(79, 70, 229, 0.24);
+    }
+    [data-testid="stBaseButton-primary"]:active:not(:disabled) { transform: translateY(0); box-shadow: 0 1px 3px rgba(55, 48, 163, 0.34) inset; }
+    [data-testid="stBaseButton-primary"]:disabled { background: #EEEDE8; border-color: var(--sams-hairline); color: #AEB2B8; box-shadow: none; }
+    /* Labels render inside a markdown <p>; inherit the button colour so the
+       primary label stays white (enabled) / muted (disabled), the secondary
+       label stays ink — never body-text ink on a slate button. */
+    [data-testid="stBaseButton-primary"] p, [data-testid="stBaseButton-secondary"] p { color: inherit; }
+    [data-testid="stBaseButton-secondary"] { background: var(--sams-surface); border: 1px solid var(--sams-hairline); color: var(--sams-ink); box-shadow: var(--sams-shadow-xs); }
+    [data-testid="stBaseButton-secondary"]:hover:not(:disabled) { border-color: var(--sams-accent); color: var(--sams-accent-strong); background: var(--sams-accent-soft); transform: translateY(-1px); box-shadow: var(--sams-shadow-sm); }
+    [data-testid="stBaseButton-secondary"]:active:not(:disabled) { transform: translateY(0); box-shadow: var(--sams-shadow-xs); }
+
+    /* ---- Focus ring (keyboard) ---- */
+    button:focus-visible, .stApp a:focus-visible, input:focus-visible {
+        outline: none; box-shadow: 0 0 0 3px var(--sams-accent-ring); border-color: var(--sams-accent);
+    }
+    .stTextInput [data-baseweb="input"]:focus-within { box-shadow: 0 0 0 3px var(--sams-accent-ring); border-color: var(--sams-accent); }
+
+    /* ---- Text input ---- */
+    .stTextInput [data-baseweb="input"] { border-radius: var(--sams-radius-md); background: var(--sams-surface);
+        transition: box-shadow var(--sams-dur) var(--sams-ease), border-color var(--sams-dur) var(--sams-ease); }
+    .stTextInput input { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+
+    /* ---- File uploader ---- */
+    [data-testid="stFileUploaderDropzone"] {
+        background: var(--sams-surface); border: 1px dashed var(--sams-hairline-strong); border-radius: var(--sams-radius-lg);
+        box-shadow: var(--sams-shadow-xs); padding: 1rem 1.25rem;
+        transition: border-color var(--sams-dur) var(--sams-ease), background var(--sams-dur) var(--sams-ease), box-shadow var(--sams-dur) var(--sams-ease);
+    }
+    [data-testid="stFileUploaderDropzone"]:hover { border-color: var(--sams-accent); background: var(--sams-accent-soft); box-shadow: var(--sams-shadow-sm); }
+    /* UX-DR14 44px touch floor: uploader Browse buttons + Streamlit nav chrome. */
+    [data-testid='stFileUploader'] button { min-height: 44px; }
+    [data-testid='stExpandSidebarButton'] button, [data-testid='stExpandSidebarButton'],
+    [data-testid='stMainMenuButton'], [data-testid='stBaseButton-headerNoPadding'] {
+        min-height: 44px; min-width: 44px;
+    }
+
+    /* ---- Expander + status strip (pipeline stages) ---- */
+    [data-testid="stExpander"] { border: 1px solid var(--sams-hairline); border-radius: var(--sams-radius-md);
+        background: var(--sams-surface); box-shadow: var(--sams-shadow-xs); overflow: hidden;
+        transition: box-shadow var(--sams-dur) var(--sams-ease), border-color var(--sams-dur) var(--sams-ease); }
+    [data-testid="stExpander"]:hover { box-shadow: var(--sams-shadow-sm); border-color: var(--sams-hairline-strong); }
+    [data-testid="stExpander"] summary { font-weight: 600; }
+    [data-testid="stExpander"] summary:hover { color: var(--sams-accent); }
+    [data-testid="stStatus"] { border-radius: var(--sams-radius-lg); border: 1px solid var(--sams-hairline); box-shadow: var(--sams-shadow-sm); }
+
+    /* ---- Alerts (kept calm: soft tint, hairline, no shout) ---- */
+    [data-testid="stAlert"] { border-radius: var(--sams-radius-md); border: 1px solid var(--sams-hairline); box-shadow: var(--sams-shadow-xs); }
+
+    /* ---- Evidence images (square inside a soft frame) ---- */
+    [data-testid="stImage"] img { border-radius: var(--sams-radius-sm); border: 1px solid var(--sams-hairline); }
+
+    /* ---- Result list (Story 4.3): card, rows, status chips ---- */
+    .sams-card { padding: 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid var(--sams-hairline); box-shadow: var(--sams-shadow-sm); }
+    .sams-row { padding: 10px 16px; border-radius: 10px; border: 1px solid transparent;
+        transition: background var(--sams-dur) var(--sams-ease), border-color var(--sams-dur) var(--sams-ease); }
+    .sams-row:hover { background: #F3F2EE; border-color: var(--sams-hairline); }
+    .sams-chip { font-weight: 600; background: none; }
+    .sams-chip-present { color: #256E4C; }
+    .sams-chip-absent { color: #A63D2A; }
+    .sams-chip-ambiguous { color: #7A6212; }
+
+    /* ---- Scrollbar ---- */
+    *::-webkit-scrollbar { width: 10px; height: 10px; }
+    *::-webkit-scrollbar-thumb { background: #DCDAD3; border-radius: 8px; border: 2px solid var(--sams-paper); }
+    *::-webkit-scrollbar-thumb:hover { background: #C9C7BF; }
+    *::-webkit-scrollbar-track { background: transparent; }
+
+    /* ---- Respect reduced-motion ---- */
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+pages = [
+    st.Page("pages/Process.py", title="Mark today's attendance", default=True),
+    st.Page("pages/Lookup.py", title="Look up a student"),
+    st.Page("pages/Investigate.py", title="Check a signature"),
+]
+st.navigation(pages).run()

@@ -8,6 +8,15 @@ from sams_core.models import InfoFile, Session, StudentRecord
 
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _FILENAME_DATE_RE = re.compile(r"^(\d{1,2})[.\-_](\d{1,2})[.\-_](\d{4})$")
+# A legitimate Info File declares no DTD. Reject one before parsing so a hostile
+# upload (Web UI = untrusted XML surface) can't mount a billion-laughs / entity
+# expansion attack through stdlib ElementTree (no defusedxml dependency needed).
+_DOCTYPE_RE = re.compile(rb"<!DOCTYPE|<!ENTITY")
+
+
+def _reject_dtd(raw: bytes, source: str) -> None:
+    if _DOCTYPE_RE.search(raw):
+        raise InputError(f"Info File must not declare a DTD or entities: {source}")
 
 
 def _get_attr(element: ET.Element, name: str) -> str | None:
@@ -30,16 +39,37 @@ def _validate_iso_date(value: str, source: str) -> str:
 
 
 def parse_info_file(path: str) -> InfoFile:
-    """Parse and validate an Info File against the PRD Appendix A schema."""
+    """Parse and validate an Info File (by path) against the PRD Appendix A schema."""
     file_path = Path(path)
     if not file_path.is_file():
         raise InputError(f"Info File not found: {path}")
 
+    _reject_dtd(file_path.read_bytes(), path)
     try:
         root = ET.parse(file_path).getroot()
     except ET.ParseError as exc:
         raise InputError(f"Info File is not valid XML: {path}") from exc
 
+    return _build_info_file(root)
+
+
+def parse_info_file_bytes(data: bytes) -> InfoFile:
+    """Parse and validate an Info File from raw bytes (AD-12: the Web UI has no
+    path). Same schema and `InputError` messages as `parse_info_file`, so both
+    frontends reject a bad Info File identically (EXPERIENCE.md)."""
+    if not data:
+        raise InputError("Info File is not valid XML: empty upload")
+    _reject_dtd(data, "uploaded file")
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError as exc:
+        raise InputError("Info File is not valid XML: uploaded file") from exc
+
+    return _build_info_file(root)
+
+
+def _build_info_file(root: ET.Element) -> InfoFile:
+    """Validate a parsed <subject> tree into an InfoFile (shared by both loaders)."""
     if root.tag != "subject":
         raise InputError(f"Info File root element must be <subject>, found <{root.tag}>")
 
