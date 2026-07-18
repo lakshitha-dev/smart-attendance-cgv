@@ -72,6 +72,65 @@ def _chronology_key(record: AttendanceRecord) -> tuple:
         return (1, 0, record.sheet_id)
 
 
+def render_score_distribution(
+    genuine_scores: Sequence[float],
+    impostor_scores: Sequence[float],
+    threshold: float,
+) -> Figure:
+    """Genuine-vs-impostor similarity histograms with the threshold line (Story 3.3).
+
+    Justifies the `SIMILARITY_THRESHOLD` choice visually: genuine probe scores
+    (a student's own probe vs their References) should sit RIGHT of the line and
+    impostor scores (other students' probes) LEFT of it. Overlap across the line
+    is the honest error the report reads off this figure. Returns a Matplotlib
+    `Figure` (never shown here — the adapter/test owns display and closing),
+    styled to match the attendance timeline: colour + label together, never
+    colour alone (UX-DR8). At least one distribution must be non-empty.
+    """
+    if not len(genuine_scores) and not len(impostor_scores):
+        raise InputError("no similarity scores to plot — nothing to draw")
+
+    import matplotlib.pyplot as plt
+
+    genuine = list(genuine_scores)
+    impostor = list(impostor_scores)
+    # Shared bins across 0-1 so the two distributions are directly comparable.
+    bins = [i / 20 for i in range(21)]
+
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    if impostor:
+        ax.hist(
+            impostor,
+            bins=bins,
+            color="#A63D2A",
+            alpha=0.6,
+            label=f"Impostor probes (n={len(impostor)})",
+        )
+    if genuine:
+        ax.hist(
+            genuine,
+            bins=bins,
+            color="#256E4C",
+            alpha=0.6,
+            label=f"Genuine probes (n={len(genuine)})",
+        )
+    ax.axvline(
+        threshold,
+        color="#33383F",
+        linestyle="--",
+        linewidth=2,
+        label=f"Threshold = {threshold:.2f}",
+    )
+
+    ax.set_xlim(0.0, 1.0)
+    ax.set_xlabel("Similarity score (0 = unlike, 1 = identical)")
+    ax.set_ylabel("Number of comparisons")
+    ax.set_title("Signature verification — genuine vs impostor score distribution")
+    ax.legend(loc="upper right", frameon=False)
+    fig.tight_layout()
+    return fig
+
+
 def render_attendance_timeline(records: Sequence[AttendanceRecord]) -> Figure:
     """Render one student's per-Session attendance timeline (FR-8).
 
