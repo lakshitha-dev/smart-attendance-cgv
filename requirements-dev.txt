@@ -1,0 +1,3 @@
+# Test/dev dependencies — NOT part of the marker's one-step install (AD-8).
+-r requirements.txt
+pytest==8.4.1
