@@ -65,8 +65,9 @@ def test_process_page_renders_stored_outcome_without_reprocessing(tmp_path, monk
     at.run()
 
     assert not at.exception
-    assert calls == []  # rerun storm: zero re-processing
-    assert any("6 students on sheet 2019-05-31" in s.value for s in at.success)
+    assert calls == []  # rerun storm: zero re-processing (the AC that matters here)
+    body = " ".join(m.value for m in at.markdown) + " ".join(c.value for c in at.caption)
+    assert body.count("Results saved.") == 1  # settled results re-rendered from state
 
 
 def test_process_page_overwrite_gate_shows_two_choices(tmp_path, monkeypatch):
@@ -88,6 +89,83 @@ def test_process_page_overwrite_gate_shows_two_choices(tmp_path, monkeypatch):
     labels = {b.label for b in at.button}
     assert "Keep resolutions" in labels
     assert "Overwrite everything" in labels
+
+
+def _result(records, warnings=None, sheet_id="2019-05-31"):
+    from sams_core.models import SheetResult
+
+    return SheetResult(
+        warnings=warnings or [],
+        detected_row_count=len(records),
+        metadata_row_y_range=None,
+        student_table_y_range=None,
+        detected_grid_lines={},
+        sheet_id=sheet_id,
+        records=tuple(records),
+        persisted_count=len(records),
+        preserved_count=0,
+    )
+
+
+def _rec(index, name, status):
+    from sams_core.models import AttendanceRecord
+
+    return AttendanceRecord(
+        student_index=index,
+        student_name=name,
+        sheet_id="2019-05-31",
+        status=status,
+        subject_code="CS402.3",
+        subject_name="Computer Graphics",
+    )
+
+
+def test_process_page_results_list_shows_chips_summary_and_saved_once(tmp_path, monkeypatch):
+    monkeypatch.setenv("SAMS_DB_PATH", str(tmp_path / "sams.db"))
+    import webui.process_logic as pl
+    from sams_core.models import AttendanceStatus as S
+
+    records = [
+        _rec("10000409", "Alice", S.PRESENT),
+        _rec("10009301", "Bea", S.ABSENT),
+        _rec("10009302", "Cy", S.AMBIGUOUS),
+    ]
+    at = AppTest.from_file(str(PAGE), default_timeout=30)
+    at.session_state["_input_sig"] = (None, None, None)
+    at.session_state["process_outcome"] = pl.ProcessOutcome(
+        result=_result(records), sheet_id="2019-05-31"
+    )
+    at.run()
+
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown) + " ".join(c.value for c in at.caption)
+    # Chips: icon + label together for each status (UX-DR8, greyscale-survivable).
+    assert "✓ Present" in body and "✕ Absent" in body and "? Ambiguous" in body
+    # Every student's name and index rendered.
+    for token in ("Alice", "Bea", "Cy", "10000409", "10009301", "10009302"):
+        assert token in body
+    # Summary line + Ambiguous call-to-action.
+    assert "3 students checked. One needs a quick look from you." in body
+    # "Results saved." stated exactly once.
+    assert body.count("Results saved.") == 1
+
+
+def test_process_page_row_count_mismatch_shows_flag_banner(tmp_path, monkeypatch):
+    monkeypatch.setenv("SAMS_DB_PATH", str(tmp_path / "sams.db"))
+    import webui.process_logic as pl
+    from sams_core.models import AttendanceStatus as S
+
+    warning = "The sheet has 5 rows but the info file lists 6 students. Matched by row order."
+    at = AppTest.from_file(str(PAGE), default_timeout=30)
+    at.session_state["_input_sig"] = (None, None, None)
+    at.session_state["process_outcome"] = pl.ProcessOutcome(
+        result=_result([_rec("10000409", "Alice", S.PRESENT)], warnings=[warning]),
+        sheet_id="2019-05-31",
+    )
+    at.run()
+
+    assert not at.exception
+    assert any("row order" in w.value for w in at.warning)  # a flag, not a failure
 
 
 def test_process_page_error_outcome_surfaces_catalog_copy(tmp_path, monkeypatch):

@@ -7,7 +7,7 @@ Identifier.
 
 import pytest
 
-from sams_core.models import AttendanceStatus, SheetResult
+from sams_core.models import AttendanceRecord, AttendanceStatus, SheetResult
 from sams_core.repository import AttendanceRepository
 from webui import process_logic
 from webui.process_logic import (
@@ -199,6 +199,41 @@ def test_run_process_unexpected_engine_error_is_calm_not_a_traceback(repo, monke
     outcome = run_process(buf.tobytes(), parsed, repo)
     assert outcome.result is None
     assert outcome.error == process_logic.GENERIC_FAILURE
+
+
+def test_results_summary_singular_plural_and_ambiguous_call_to_action():
+    from webui.process_logic import results_summary
+
+    def rec(status):
+        return AttendanceRecord(
+            student_index="10000001",
+            student_name="X",
+            sheet_id="s",
+            status=status,
+            subject_code="C",
+            subject_name="N",
+        )
+
+    P, A, Q = AttendanceStatus.PRESENT, AttendanceStatus.ABSENT, AttendanceStatus.AMBIGUOUS
+    assert results_summary([rec(P)]) == "1 student checked."
+    assert results_summary([rec(P), rec(A)]) == "2 students checked."
+    assert (
+        results_summary([rec(P), rec(Q)])
+        == "2 students checked. One needs a quick look from you."
+    )
+    assert (
+        results_summary([rec(Q), rec(Q), rec(P)])
+        == "3 students checked. 2 need a quick look from you."
+    )
+
+
+def test_status_chip_map_has_icon_label_and_class_for_every_status():
+    from webui.process_logic import STATUS_CHIP
+
+    assert set(STATUS_CHIP) == set(AttendanceStatus)
+    for status, (icon, label, css) in STATUS_CHIP.items():
+        assert icon and label and css.startswith("sams-chip-")
+        assert label == status.value  # chip label matches the canonical status
 
 
 def test_run_process_end_to_end_persists_to_the_db(repo):
