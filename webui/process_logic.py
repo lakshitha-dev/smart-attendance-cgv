@@ -1,5 +1,5 @@
-"""Process page logic (Story 4.2, FR-12/AD-12): the Streamlit-free core of the
-one-tap processing flow, kept testable without a Streamlit runtime.
+"""Process page logic (Stories 4.2/4.3, FR-12/FR-13/AD-12): the Streamlit-free
+core of the one-tap processing flow, kept testable without a Streamlit runtime.
 
 The engine owns everything real — `parse_info_file_bytes` validates the Info
 File, `resolve_sheet_identifier` fixes the Sheet Identifier (AD-11: the Web UI
@@ -10,13 +10,23 @@ maps engine `InputError`s to the verbatim UX-DR12 error-catalog copy. No cv2,
 no sqlite, no Streamlit.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from sams_core.errors import InputError, SamsError
 from sams_core.image_io import load_image_bytes
 from sams_core.info_file import parse_info_file_bytes, resolve_sheet_identifier
-from sams_core.models import InfoFile, SheetResult
+from sams_core.models import AttendanceRecord, AttendanceStatus, InfoFile, SheetResult
 from sams_core.repository import AttendanceRepository
+
+# UX-DR8 status chips: icon + label + colour, ALWAYS all three (greyscale-
+# survivable). Coloured text/glyph only — no filled backgrounds. Colours are
+# the CSS classes injected by app.py; the icon+label carry meaning without them.
+STATUS_CHIP = {
+    AttendanceStatus.PRESENT: ("✓", "Present", "sams-chip-present"),
+    AttendanceStatus.ABSENT: ("✕", "Absent", "sams-chip-absent"),
+    AttendanceStatus.AMBIGUOUS: ("?", "Ambiguous", "sams-chip-ambiguous"),
+}
 
 # UX-DR12 error catalog, verbatim.
 BAD_IMAGE = (
@@ -155,3 +165,25 @@ def process_sheet_run(image_bytes, parsed, repository, overwrite, on_stage):
         on_stage=on_stage,
         repository=repository,
     )
+
+
+def results_summary(records: Sequence[AttendanceRecord]) -> str:
+    """UX-DR7 summary line: "42 students checked. One needs a quick look from
+    you." Ambiguous rows are the ones that need a look; Present/Absent are
+    settled."""
+    total = len(records)
+    ambiguous = sum(1 for r in records if r.status is AttendanceStatus.AMBIGUOUS)
+    noun = "student" if total == 1 else "students"
+    line = f"{total} {noun} checked."
+    if ambiguous == 1:
+        line += " One needs a quick look from you."
+    elif ambiguous > 1:
+        line += f" {ambiguous} need a quick look from you."
+    return line
+
+
+def mismatch_warnings(result: SheetResult) -> list[str]:
+    """The row-count-mismatch flag(s) to surface as a banner ABOVE results
+    (UX-DR12: a prominent flag, not a failure). The engine already phrased
+    these in error-catalog wording."""
+    return list(result.warnings)
