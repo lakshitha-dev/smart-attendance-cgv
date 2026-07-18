@@ -1,5 +1,5 @@
 ---
-status: ready-for-dev
+status: review
 epic: 4
 story: '4.7'
 title: Use SAMS comfortably on phone, desktop, and projector
@@ -8,6 +8,7 @@ uxdrs: [UX-DR13, UX-DR14, UX-DR15]
 nfrs: [SM-6, NFR-12]
 owner: M8 (Topic 8), with M6 on parity check
 sprint: Week 2, Day 9 · 🔒 gated
+baseline_commit: 807d137
 ---
 
 # Story 4.7: Use SAMS comfortably on phone, desktop, and projector
@@ -49,3 +50,57 @@ So that the same app serves the corridor, the office, and the viva.
 ## Definition of Done
 
 Phone + desktop walkthrough of all three pages recorded (screenshots for the report); parity diff empty; greyscale + keyboard audits pass; no core-flow horizontal scroll at 360 px width.
+
+## Tasks / Subtasks
+
+- [x] Task 1: Cross-frontend parity (FR-15/SM-6) — automated test proving the CLI path (process_sheet with a path) and the Web path (process_logic.run_process with bytes) persist BYTE-IDENTICAL attendance rows for the same sheet, and that Web Lookup reads back what the CLI wrote (both index forms)
+- [x] Task 2: Accessibility-floor guards (UX-DR15) — status chips always icon+label (greyscale-survivable), every input has a visible label, actions are real st.buttons (no HTML onclick), stage images caption "Stage N of 7 — Label"
+- [x] Task 3: Banned-primitives audit (UX-DR14) — no st.balloons/snow/toast/camera_input; resolve/undo are direct buttons (no confirm dialog for reversible actions)
+- [ ] Task 4: [Manual/browser] phone (360px) + desktop walkthrough screenshots for the report; greyscale desaturation check; keyboard Tab/Enter pass — REQUIRES a real browser/device, cannot be done headlessly (see hand-off below)
+
+## Dev Agent Record
+
+### Completion Notes
+
+Automated-verified (this pass):
+- **Parity (FR-15/SM-6):** tests/test_parity.py processes sheet 1 via the CLI
+  path and the Web path into two temp DBs and asserts identical (index, status,
+  resolved) rows — 6/6 match; both frontends call the one engine entry point
+  (AD-12), so parity is structural and now pinned. Lookup read-back parity for
+  both index forms also covered.
+- **Accessibility floor (UX-DR15):** icon+label chips (greyscale-survivable),
+  visible labels on every input, real st.buttons in reading order, stage-image
+  captions carry "Stage N of 7 — Label". tests/test_webui_accessibility.py.
+- **Banned primitives (UX-DR14):** guarded — no balloons/snow/toast/camera;
+  resolve/undo have no confirm dialog.
+- Full suite 250 passed; live streamlit HTTP 200.
+
+Honest hand-off — NOT verified here (needs a real browser/device, which the
+headless harness structurally cannot drive):
+- Phone 360px single-column / no-horizontal-scroll walkthrough + screenshots.
+- Desktop two-column visual confirmation and 2–3 m projector readability.
+- Greyscale desaturation screenshots; keyboard Tab/Enter pass.
+- **Known Streamlit constraint for that reviewer:** st.columns do NOT auto-stack
+  on narrow viewports. The pages are deliberately single-column flows (phone-safe,
+  projector-readable, centered at 1100px); Investigate's ref-vs-probe st.columns(2)
+  stays side-by-side (shrinking) on phone rather than stacking. Forcing a
+  non-stacking two-column Process layout would REGRESS the phone
+  no-horizontal-scroll AC, so single-column was chosen deliberately. The browser
+  reviewer should confirm this trade-off is acceptable for the demo, or decide a
+  custom-CSS media-query layout is warranted.
+- **Alt text:** st.image exposes no HTML alt attribute (Streamlit limit); the
+  required "Stage N of 7 — Label" text is carried as the image caption (visible +
+  screen-reader-available). If true alt is required, it needs a custom component.
+
+### File List
+
+- tests/test_parity.py (new — CLI/Web data-layer parity)
+- tests/test_webui_accessibility.py (new — UX-DR14/DR15 guards)
+- _bmad-output/implementation-artifacts/4-7-responsive-accessible-on-all-surfaces.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+
+### Change Log
+
+- 2026-07-18: Story 4.7 — automated parity + accessibility/banned-primitive
+  guards (250/250). Visual/responsive/keyboard audits handed off for a browser
+  pass (documented, not faked); single-column layout rationale recorded.
