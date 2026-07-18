@@ -200,6 +200,9 @@ _REGISTRY: tuple[tuple[int, str, str, StageFunction | None], ...] = (
     (7, "per-cell-inspection", "Per-Cell Inspection", None),  # produced by detect.detect_signatures
 )
 
+# The one true stage count (AD-3) — adapters read this instead of hardcoding 7.
+STAGE_COUNT = len(_REGISTRY)
+
 
 def stage_identity(order: int) -> tuple[int, str, str]:
     """Return (order, slug, label) for a registry stage — the single source (AD-3)."""
