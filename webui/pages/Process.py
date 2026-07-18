@@ -106,7 +106,11 @@ if _slot_ready(info_file):
             key=f"session_date_{info_file.file_id}",
             help="This sheet's info file has no session date, so please enter it.",
         )
-        parsed = parse_info(info_file.getvalue(), session_date=session_date or None)
+        parsed = _memo(
+            "info_dated",
+            (info_file.file_id, session_date),
+            lambda: parse_info(info_file.getvalue(), session_date=session_date or None),
+        )
         if parsed.error:
             st.error(parsed.error)  # show BAD_DATE for a bad manually-typed date
 
@@ -129,6 +133,7 @@ if st.session_state.get("_input_sig") != current_sig:
     st.session_state.pop("process_stages", None)  # strip descriptors describe the OLD inputs
     st.session_state.pop("_overwrite_run", None)
     st.session_state.pop("resolve_notice", None)
+    st.session_state.pop("resolve_error", None)
 
 # UX-DR4: one full-width primary Process button, disabled until inputs ready.
 process_clicked = st.button("Process", type="primary", width="stretch", disabled=not inputs_ok)
@@ -223,7 +228,18 @@ def _row_html(record) -> str:
     )
 
 
-def _render_ambiguous_row(record, sheet_id: str) -> None:
+def _resolve_and_notify(sheet_id: str, index: str, present: bool, repo) -> None:
+    """Resolve one row and rerun. Checks the repository's return — a zero-row
+    update (the row vanished) must surface, never a dead tap with no feedback."""
+    label = "Present" if present else "Absent"
+    if resolve_row(sheet_id, index, present=present, repository=repo):
+        st.session_state["resolve_notice"] = (index, label)
+    else:
+        st.session_state["resolve_error"] = True
+    st.rerun()
+
+
+def _render_ambiguous_row(record, sheet_id: str, repo) -> None:
     """UX-DR9 Ambiguous row: straw fill + ochre border, a plain question, and
     two NEUTRAL-outlined resolve buttons (the ✓/✕ glyph + word carry meaning;
     the button chrome takes no status colour). One tap resolves instantly (no
@@ -238,37 +254,47 @@ def _render_ambiguous_row(record, sheet_id: str) -> None:
         f"font-size:0.85em'>{index}</span><br>{AMBIGUOUS_QUESTION}</div>",
         unsafe_allow_html=True,
     )
-    present_col, absent_col = st.columns(2)
-    if present_col.button("✓ Present", key=f"present_{record.student_index}", width="stretch"):
-        resolve_row(sheet_id, record.student_index, present=True, repository=AttendanceRepository())
-        st.session_state["resolve_notice"] = (record.student_index, "Present")
-        st.rerun()
-    if absent_col.button("✕ Absent", key=f"absent_{record.student_index}", width="stretch"):
-        resolve_row(sheet_id, record.student_index, present=False, repository=AttendanceRepository())
-        st.session_state["resolve_notice"] = (record.student_index, "Absent")
-        st.rerun()
+    columns = st.columns(2)
+    for column, (button_label, present) in zip(columns, (("✓ Present", True), ("✕ Absent", False))):
+        prefix = "present" if present else "absent"
+        if column.button(button_label, key=f"{prefix}_{record.student_index}", width="stretch"):
+            _resolve_and_notify(sheet_id, record.student_index, present, repo)
 
 
-def _render_resolved_notice(student_index: str, sheet_id: str) -> None:
-    """Inline "Saved as X. Undo" after a resolution — text (UX-DR15), not colour
-    only. Shows until the next interaction; Undo restores Ambiguous."""
+def _render_resolved_row(record, sheet_id: str, repo) -> None:
+    """A row the operator has resolved: the normal row plus a persistent Undo
+    (any resolved row stays undoable while results are on screen — not a single
+    transient window that a second resolution or a scroll would erase). The
+    just-resolved row also shows "Saved as X." text (UX-DR15). Undo restores
+    Ambiguous (repository semantics); a failed undo surfaces, never silent."""
+    st.markdown(_row_html(record), unsafe_allow_html=True)
     notice = st.session_state.get("resolve_notice")
-    if not notice or notice[0] != student_index:
-        return
-    _, label = notice
-    notice_col, undo_col = st.columns([3, 1])
-    notice_col.markdown(f":primary[Saved as {label}.]")
-    if undo_col.button("Undo", key=f"undo_{student_index}", width="stretch"):
-        undo_row(sheet_id, student_index, repository=AttendanceRepository())
-        st.session_state.pop("resolve_notice", None)
-        st.rerun()
+    just_resolved = notice is not None and notice[0] == record.student_index
+    text_col, undo_col = st.columns([4, 1])
+    if just_resolved:
+        text_col.markdown(f":primary[Saved as {notice[1]}.]")
+    if undo_col.button("Undo", key=f"undo_{record.student_index}", width="stretch"):
+        if undo_row(sheet_id, record.student_index, repository=repo):
+            st.session_state.pop("resolve_notice", None)
+            st.rerun()
+        else:
+            st.warning("Couldn't undo that — the row is no longer saved.")
 
 
 def _render_results(result, sheet_id: str) -> None:
-    """UX-DR7/DR9 results: rows reflect SAVED DB state (so a resolution flips
-    its row). Completion line, summary, one saved notice, flag banners, then a
-    container row per Student Record — Ambiguous rows carry resolve buttons."""
-    rows = saved_rows(sheet_id, AttendanceRepository())
+    """UX-DR7/DR9 results. Rows reflect SAVED DB state (so a resolution flips
+    its row) BUT are scoped to THIS run's roster and rendered in roster order —
+    `sheet_id` is the session date, so a second sheet on the same date must not
+    pull the first sheet's rows into this list. Ambiguous rows carry resolve
+    buttons; operator-resolved rows carry Undo."""
+    if not sheet_id:
+        st.info("We finished, but couldn't identify this sheet — please try again.")
+        return
+    repo = AttendanceRepository()
+    db_by_index = {row.student_index: row for row in saved_rows(sheet_id, repo)}
+    # Iterate this run's Student Records (roster/detected order), pulling each
+    # row's LIVE persisted status — scopes out any other same-date sheet's rows.
+    rows = [db_by_index[r.student_index] for r in result.records if r.student_index in db_by_index]
     if not rows:
         st.info("We finished, but couldn't find any students on that sheet — "
                 "check the photo shows the full signing table, then try again.")
@@ -278,17 +304,22 @@ def _render_results(result, sheet_id: str) -> None:
     st.write(results_summary(rows))
     st.caption("Results saved.")  # stated exactly once (engine already persisted)
 
+    if st.session_state.pop("resolve_error", False):
+        st.warning("We couldn't save that just now — please try again.")
     for banner in result_banners(result):  # prominent flags, not failures
         st.warning(banner)
 
     for record in rows:
         if record.status is AttendanceStatus.AMBIGUOUS:
-            _render_ambiguous_row(record, sheet_id)
+            _render_ambiguous_row(record, sheet_id, repo)
+        elif record.resolved_by_operator:
+            _render_resolved_row(record, sheet_id, repo)
         else:
             st.markdown(_row_html(record), unsafe_allow_html=True)
-            _render_resolved_notice(record.student_index, sheet_id)
 
-    if not any(r.status is AttendanceStatus.AMBIGUOUS for r in rows):
+    # UX-DR9 all-done: only once ambiguity actually existed and is now settled.
+    no_ambiguous = not any(r.status is AttendanceStatus.AMBIGUOUS for r in rows)
+    if no_ambiguous and any(r.resolved_by_operator for r in rows):
         st.success(ALL_RESOLVED)
 
 

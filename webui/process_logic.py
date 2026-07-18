@@ -40,7 +40,6 @@ __all__ = [
     "saved_rows",
     "resolve_row",
     "undo_row",
-    "HAIRLINE",
     "AMBIGUOUS_FILL",
     "AMBIGUOUS_BORDER",
     "AMBIGUOUS_QUESTION",
@@ -57,7 +56,6 @@ STATUS_CHIP = {
     AttendanceStatus.AMBIGUOUS: ("?", "Ambiguous", "#7A6212"),
 }
 MUTED_INK = "#7B818A"  # DESIGN.md ink-muted: overline + current-stage caption
-HAIRLINE = "#E9E8E3"  # neutral outline for resolve buttons (NO status colour)
 
 # UX-DR9 Ambiguous-row treatment + verbatim copy.
 AMBIGUOUS_FILL = "#FDFBF2"  # pale straw
