@@ -373,6 +373,23 @@ st.markdown(
 
         /* The results split stays a single row of three. */
         .sams-split-tile { min-width: 0; padding: 10px 11px; }
+
+        /* Quick-pick pills: as stacked columns these became N full-width
+           buttons (~530px for a 12-student roster). Let them size to content
+           and wrap, which is the pill row the design intended. */
+        .st-key-quick_pick [data-testid="stColumn"] { min-width: 0; flex: 0 0 auto; width: auto; }
+        .st-key-quick_pick [data-testid="stHorizontalBlock"] { gap: 8px; }
+
+        /* Matplotlib figures are authored 8-9in wide with 9-13.5pt text. Squeezed
+           into a ~366px column their labels land near 6pt; holding a 600px floor
+           puts them back around 10pt and pans horizontally instead. Scoped to
+           .st-key-sams_chart because st.pyplot renders as a plain stImage — the
+           same test id as the pipeline stage photos and the signature crops,
+           which must keep scaling down to fit. */
+        .st-key-sams_chart [data-testid="stImageContainer"] { overflow-x: auto; }
+        .st-key-sams_chart [data-testid="stImageContainer"] img {
+            min-width: 600px; width: auto; max-width: none; height: auto;
+        }
     }
     </style>
     """,

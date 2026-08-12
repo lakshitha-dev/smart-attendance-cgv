@@ -73,7 +73,11 @@ else:
         if result.message:
             st.write(result.message)
         elif fig is not None:
-            st.pyplot(fig)
+            # Keyed so the phone breakpoint can hold the figure at a legible
+            # width and pan it, rather than scaling a 9in-wide chart into a
+            # ~366px column where the axis labels land around 6pt.
+            with st.container(key="sams_chart"):
+                st.pyplot(fig)
             import matplotlib.pyplot as plt
 
             plt.close(fig)  # long-lived server: never accumulate figures

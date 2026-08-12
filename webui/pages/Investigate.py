@@ -46,7 +46,10 @@ def _render_found(result) -> None:
     score = display_score(best.score)
     threshold = display_score(result.threshold)
     fig = render_score_scale(score, threshold, result.matched)
-    st.pyplot(fig)
+    # Keyed so the phone breakpoint can hold the scale at a legible width and
+    # pan it, rather than scaling an 8in-wide figure into a ~366px column.
+    with st.container(key="sams_chart"):
+        st.pyplot(fig)
     import matplotlib.pyplot as plt
 
     plt.close(fig)  # long-lived server: never accumulate figures
