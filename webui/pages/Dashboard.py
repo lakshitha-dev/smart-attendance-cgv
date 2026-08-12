@@ -27,12 +27,6 @@ from webui.process_logic import MUTED_INK
 st.title("Dashboard")
 st.markdown("A quick read on the class, then jump straight to what needs doing.")
 
-_HAIRLINE = "#E9E8E3"
-_TILE = (
-    "background:#FFFFFF;border:1px solid " + _HAIRLINE + ";border-radius:14px;"
-    "box-shadow:0 1px 2px rgba(28,33,40,.05);padding:16px 18px"
-)
-
 
 def _overline(text: str) -> None:
     """The system's one overline (DESIGN.md): muted-ink, uppercase, tracked."""
@@ -61,9 +55,12 @@ def _db_token():
 
 
 def _stat_tile(value: str, label: str, colour: str) -> str:
-    """One headline tile (SAMS.dc.html): big coloured figure over a muted label."""
+    """One headline tile (SAMS.dc.html): big coloured figure over a muted label.
+    Shape comes from the shared .sams-tile class in app.py — only the figure's
+    colour varies per tile, so only that stays inline (a class rule cannot
+    override an inline declaration, which the phone breakpoint needs to do)."""
     return (
-        f"<div style='{_TILE}'>"
+        "<div class='sams-tile'>"
         f"<div style='font-size:2rem;font-weight:800;color:{colour};line-height:1;"
         f"font-variant-numeric:tabular-nums'>{html.escape(value)}</div>"
         f"<div style='color:{MUTED_INK};font-size:0.85rem;margin-top:3px'>{html.escape(label)}</div>"
@@ -177,8 +174,7 @@ def _render_overview(data, repository) -> None:
         )
         view = range_view(data, dates.index(range_from), dates.index(range_to))
         sum_col.markdown(
-            f"<div style='text-align:right;color:{MUTED_INK};font-size:0.85rem;"
-            f"font-variant-numeric:tabular-nums'>{html.escape(view.summary)}</div>",
+            f"<div class='sams-range-summary'>{html.escape(view.summary)}</div>",
             unsafe_allow_html=True,
         )
 
@@ -189,8 +185,7 @@ def _render_overview(data, repository) -> None:
     flagged = len(view.low_attendance) + len(alerts)
 
     st.markdown(
-        "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));"
-        "gap:14px;margin-bottom:6px'>"
+        "<div class='sams-stat-grid'>"
         + _stat_tile(str(view.roster_count), "students on roster", "#4F46E5")
         + _stat_tile(str(view.session_count), "sessions recorded", "#33383F")
         + _stat_tile(f"{view.average_rate}%", "average attendance", "#256E4C")

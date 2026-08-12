@@ -206,6 +206,43 @@ st.markdown(
     .sams-chip-absent { color: #A63D2A; }
     .sams-chip-ambiguous { color: #7A6212; }
 
+    /* ---- Shared tiles, grids + rows ----
+       These carry the layout that Dashboard/History/Process used to inline on
+       each element. Layout has to live in real classes, not style="…", because
+       an inline declaration outranks any class rule — including the phone
+       overrides in the @media block at the end of this sheet. Only the values
+       that genuinely vary per element (a status colour, a bar's height) stay
+       inline. */
+    .sams-tile { background: var(--sams-surface); border: 1px solid var(--sams-hairline);
+        border-radius: 14px; box-shadow: var(--sams-shadow-xs); padding: 16px 18px; }
+    .sams-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 14px; margin-bottom: 6px; }
+    .sams-tile-wide { grid-column: 1 / -1; }  /* the trend tile spans the grid */
+
+    /* Session history: one saved session's summary line. */
+    .sams-session-summary { display: flex; align-items: center; gap: 16px; }
+    .sams-ss-date { min-width: 110px; }
+    .sams-ss-bar { flex: 1; min-width: 80px; height: 8px; border-radius: 99px; background: #EEEDE8; }
+    .sams-ss-split { min-width: 100px; text-align: right; color: var(--sams-ink-muted);
+        font-size: 0.85rem; white-space: nowrap; }
+    .sams-ss-rate { min-width: 52px; text-align: right; font-weight: 800; font-size: 1.1rem; }
+
+    /* Session history: the ATTENDANCE TREND mini-bars. */
+    .sams-trend-bars { display: flex; align-items: flex-end; gap: 8px; height: 64px; }
+    .sams-trend-col { flex: 1; display: flex; flex-direction: column; align-items: center;
+        gap: 6px; justify-content: flex-end; }
+    .sams-trend-bar { width: 30px; border-radius: 7px 7px 3px 3px;
+        background: linear-gradient(180deg, #6366F1, #4F46E5); }
+
+    /* Dashboard: the DATE RANGE card's right-hand summary. */
+    .sams-range-summary { text-align: right; color: var(--sams-ink-muted); font-size: 0.85rem;
+        font-variant-numeric: tabular-nums; }
+
+    /* Process: the Present / Absent / Needs-a-look split after a run. */
+    .sams-split-tiles { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 4px; }
+    .sams-split-tile { flex: 1; min-width: 120px; border: 1px solid; border-radius: 12px;
+        padding: 12px 14px; }
+
     /* ---- File dropzones (SAMS design microcopy + centered column) ---- */
     [data-testid="stFileUploaderDropzone"] { flex-direction: column; gap: 10px; text-align: center; }
     [data-testid="stFileUploaderDropzone"] svg { display: none; }  /* no cloud icon in the design */

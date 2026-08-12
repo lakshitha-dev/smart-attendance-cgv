@@ -304,16 +304,18 @@ def _stat_chips_html(records) -> str:
         (counts[AttendanceStatus.ABSENT], "Absent", "#FBF2F0", "#ECCFC7", "#A63D2A"),
         (counts[AttendanceStatus.AMBIGUOUS], "Needs a look", "#FDFBF2", "#E3D9B4", "#7A6212"),
     )
+    # Shape lives in .sams-split-tile (app.py) so the phone breakpoint can drop
+    # the 120px floor and keep all three in one row; only each tile's own
+    # colours stay inline.
     body = "".join(
-        f"<div style='flex:1;min-width:120px;background:{fill};border:1px solid {border};"
-        f"border-radius:12px;padding:12px 14px'>"
+        f"<div class='sams-split-tile' style='background:{fill};border-color:{border}'>"
         f"<div style='font-size:1.6rem;font-weight:800;color:{ink};line-height:1;"
         f"font-variant-numeric:tabular-nums'>{count}</div>"
         f"<div style='color:{ink};font-size:0.82rem;font-weight:600;margin-top:2px'>{label}</div>"
         "</div>"
         for count, label, fill, border, ink in tiles
     )
-    return f"<div style='display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 4px'>{body}</div>"
+    return f"<div class='sams-split-tiles'>{body}</div>"
 
 
 def _csv_text(records, repo) -> str:
