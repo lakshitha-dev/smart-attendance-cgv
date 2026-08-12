@@ -347,6 +347,32 @@ st.markdown(
            looks orphaned when right-aligned under a full-width select. */
         .st-key-date_arrow { display: none; }
         .sams-range-summary { text-align: left; }
+
+        /* Session history summary: four fixed min-widths totalling ~390px
+           overflowed a ~324px card and pushed the rate reading off-screen.
+           Wrap to two lines — date + counts + rate, then the bar beneath. */
+        .sams-session-summary { flex-wrap: wrap; gap: 6px 10px; }
+        .sams-ss-date { min-width: 0; flex: 1 1 auto; }
+        .sams-ss-split { min-width: 0; order: 2; }
+        .sams-ss-rate { min-width: 0; order: 3; }
+        .sams-ss-bar { order: 4; flex: 1 1 100%; }
+
+        /* Trend bars compress instead of overflowing once a class has enough
+           sessions (12 fixed 30px bars + gaps needed 448px). */
+        .sams-trend-bar { width: 100%; max-width: 30px; }
+
+        /* Keep each student's Timeline button beside their row rather than
+           letting it become a full-width bar that doubles the list length.
+           The row column needs basis 0, not auto: at auto it holds its full
+           content width, so row + gap + button overran the line and the button
+           wrapped underneath anyway. */
+        [class*="st-key-hist_rows_"] [data-testid="stHorizontalBlock"] { gap: 8px; flex-wrap: nowrap; }
+        [class*="st-key-hist_rows_"] [data-testid="stColumn"] { min-width: 0; }
+        [class*="st-key-hist_rows_"] [data-testid="stColumn"]:first-of-type { flex: 1 1 0%; width: auto; }
+        [class*="st-key-hist_rows_"] [data-testid="stColumn"]:last-of-type { flex: 0 0 auto; width: auto; }
+
+        /* The results split stays a single row of three. */
+        .sams-split-tile { min-width: 0; padding: 10px 11px; }
     }
     </style>
     """,

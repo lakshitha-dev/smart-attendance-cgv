@@ -121,7 +121,12 @@ def _render(data) -> None:
     for session in data.sessions:
         with st.container(border=True):
             st.markdown(_summary_html(session), unsafe_allow_html=True)
-            with st.expander(f"Students ({session.total})"):
+            # Keyed container so the phone breakpoint can keep each row's
+            # Timeline button beside the student instead of letting it stack
+            # into a full-width bar that doubles the length of the list.
+            with st.expander(f"Students ({session.total})"), st.container(
+                key=f"hist_rows_{session.sheet_id}"
+            ):
                 for record in session.records:
                     row_col, link_col = st.columns([5, 1], vertical_alignment="center")
                     row_col.markdown(_row_html(record), unsafe_allow_html=True)
