@@ -287,6 +287,67 @@ st.markdown(
 
     /* ---- Respect reduced-motion ---- */
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+    /* ---- Phone layout (<= 640px) ----
+       640px is Streamlit's OWN column-stacking breakpoint, not a number picked
+       here: its stylesheet carries a single
+           @media (max-width: 640px) { <column> { min-width: calc(100% - 1.5rem) } }
+       rule, which is what makes st.columns wrap to full width (the blocks are
+       flex-flow: wrap at every size — the direction never changes). Matching
+       that breakpoint means the two sheets agree instead of disagreeing at
+       intermediate widths. Rules below either accept the stacking or override
+       that one min-width where a side-by-side reading is worth keeping.
+       Hooks are the stable data-testid / .st-key-* attributes — never the
+       hashed .st-emotion-cache-* classes, which change between releases. */
+    @media (max-width: 640px) {
+        /* (The header session chip is gated to min-width: 641px at its own
+           injection site in _session_chip_css below — it is added by a later
+           st.markdown, so hiding it from here would lose on document order.) */
+
+        /* Reclaim first-screen height and ~12px of width per side. The width
+           matters: it is what lets the stat grid hold two columns. */
+        .block-container { padding-left: 12px; padding-right: 12px;
+            padding-top: 1.25rem; padding-bottom: 2.5rem; }
+        .stApp h1 { font-size: 1.6rem; }
+        .stApp h2 { font-size: 1.18rem; }
+
+        /* Quick actions: "Mark attendance" keeps a full-width card (it is the
+           system's main function), the two middle cards pair up, and the last
+           spans again — four stacked 118px cards otherwise ate the whole first
+           screen. Overriding min-width is what re-forms the wrapped row. */
+        .st-key-quick_actions [data-testid="stColumn"] {
+            min-width: 0; flex: 0 0 calc(50% - 7.5px); width: auto;
+        }
+        .st-key-quick_actions [data-testid="stColumn"]:first-of-type,
+        .st-key-quick_actions [data-testid="stColumn"]:last-of-type { flex-basis: 100%; }
+        /* A Streamlit button label sits inside TWO nested flex wrappers that
+           both centre their content (button > div > span > stMarkdownContainer),
+           and the span is shrink-to-fit — so the card text floated mid-card.
+           Every level has to be told to start-align and fill the width, or the
+           innermost text-align has nothing to align within. */
+        .st-key-quick_actions .stButton button {
+            min-height: 92px; padding: 12px 14px; justify-content: flex-start;
+        }
+        .st-key-quick_actions .stButton button > div,
+        .st-key-quick_actions .stButton button > div > span {
+            justify-content: flex-start; width: 100%;
+        }
+        .st-key-quick_actions .stButton button [data-testid="stMarkdownContainer"] {
+            text-align: left; width: 100%;
+        }
+
+        /* Stat tiles: auto-fit + minmax(160px) needs 334px and a phone card
+           offers ~324px, so the grid silently collapsed to ONE column. Pin it
+           to a 2x2 instead of leaving it a rounding accident. */
+        .sams-stat-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+        .sams-tile { padding: 14px; }
+
+        /* DATE RANGE stacks into five rows; the bare "→" between the two
+           selects reads as a stray glyph on its own line, and the summary
+           looks orphaned when right-aligned under a full-width select. */
+        .st-key-date_arrow { display: none; }
+        .sams-range-summary { text-align: left; }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -312,12 +373,21 @@ def _session_chip_css() -> str | None:
         latest = date.fromisoformat(max(sheets)).strftime("%d %b %Y")
     except Exception:
         return None
+    # Gated at min-width: 641px (the complement of the phone breakpoint in the
+    # sheet above, so the two neither gap nor overlap). At right: 24px the chip
+    # lands exactly where Streamlit puts its menu button on a phone and the two
+    # overlap; the same date already leads the LATEST SESSION card, so the chip
+    # simply does not exist below 641px. The gate has to live HERE rather than
+    # as an override in the main sheet: this block is injected by a later
+    # st.markdown, so on equal specificity it would win on document order.
     return (
         "<style>"
+        "@media (min-width: 641px) {"
         '[data-testid="stHeader"]::after {'
         f' content: "🟢 Session · {latest}";'
         " position: absolute; right: 24px; top: 50%; transform: translateY(-50%);"
         " color: #7B818A; font-size: 0.85rem; white-space: nowrap; }"
+        "}"
         "</style>"
     )
 

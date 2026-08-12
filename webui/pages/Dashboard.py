@@ -168,7 +168,11 @@ def _render_overview(data, repository) -> None:
         range_from = from_col.selectbox(
             "From", dates, index=0, key="dash_from", label_visibility="collapsed"
         )
-        arrow_col.markdown(f"<span style='color:{MUTED_INK}'>→</span>", unsafe_allow_html=True)
+        # Keyed so the phone breakpoint can hide it: once the five columns
+        # stack, a lone "→" between two full-width selects reads as a stray
+        # glyph on its own row rather than as a from/to connector.
+        with arrow_col, st.container(key="date_arrow"):
+            st.markdown(f"<span style='color:{MUTED_INK}'>→</span>", unsafe_allow_html=True)
         range_to = to_col.selectbox(
             "To", dates, index=len(dates) - 1, key="dash_to", label_visibility="collapsed"
         )
