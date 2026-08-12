@@ -23,6 +23,9 @@ _bmad/
 CS402.3 Coursework.md
 CS402.3 Coursework.docx
 
+# report build artifacts (the figures ARE tracked — the Word documents are not)
+docs/report/*.docx
+
 # internal working notes
 IMPLEMENTATION_COMPLETE_*.md
 STORY_*_IMPLEMENTATION.md
